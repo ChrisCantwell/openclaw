@@ -333,6 +333,10 @@ describe("worker placement move destination", () => {
       runMoveBarrier,
       dispatch,
       reclaimSource,
+      validateAbandonSource: vi.fn(),
+      abandonSource: vi.fn(async () => {
+        throw new Error("unexpected source abandonment");
+      }),
       resolveDestination: dispatchOptions.resolveMoveDestination,
     });
 

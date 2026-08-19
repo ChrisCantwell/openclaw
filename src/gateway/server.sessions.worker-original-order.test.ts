@@ -409,6 +409,7 @@ test("preserves ordered fallback through restart, workspace sync, and safe sessi
         };
       },
     },
+    runnerAvailability: { read: () => undefined },
     workspaceOperations: createWorkerWorkspaceOperationCoordinator(),
     runLocalBarrier: async ({ startDispatch }) => startDispatch(),
     runActivationBarrier: async ({ activate }) => activate(),

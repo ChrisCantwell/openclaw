@@ -180,6 +180,7 @@ describe("worker environment service", () => {
     const dispatch = createWorkerPlacementDispatchService({
       placements,
       environments: workerService,
+      runnerAvailability: { read: () => undefined },
       workspaceOperations: createWorkerWorkspaceOperationCoordinator(),
       runLocalBarrier: async ({ startDispatch }) => startDispatch(),
       runActivationBarrier: async ({ activate }) => activate(),
