@@ -7,6 +7,7 @@ version and the additive schema surface. Dates are authoring dates (2026).
 
 ## Unreleased
 
+- Add the authoritative opaque session-routing contract to agent-list results.
 - Add bounded `sessions.patchMany` session mutation orchestration.
 - Preserve required legacy agent-default fields while adding honest `ownership` and `selectionRequired` state to agent lists and initial snapshots.
 - Add semantic `agent` / `system` roster kinds negotiated through the `agent-kind` client capability.

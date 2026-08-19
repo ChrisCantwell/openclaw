@@ -14578,6 +14578,7 @@ public struct AgentsListResult: Codable, Sendable {
     public let defaultid: String
     public let ownership: AnyCodable?
     public let selectionrequired: Bool?
+    public let sessionroutingcontract: String?
     public let mainkey: String
     public let scope: AnyCodable
     public let agents: [AgentSummary]
@@ -14586,6 +14587,7 @@ public struct AgentsListResult: Codable, Sendable {
         defaultid: String,
         ownership: AnyCodable? = nil,
         selectionrequired: Bool? = nil,
+        sessionroutingcontract: String? = nil,
         mainkey: String,
         scope: AnyCodable,
         agents: [AgentSummary])
@@ -14593,6 +14595,7 @@ public struct AgentsListResult: Codable, Sendable {
         self.defaultid = defaultid
         self.ownership = ownership
         self.selectionrequired = selectionrequired
+        self.sessionroutingcontract = sessionroutingcontract
         self.mainkey = mainkey
         self.scope = scope
         self.agents = agents
@@ -14602,6 +14605,7 @@ public struct AgentsListResult: Codable, Sendable {
         case defaultid = "defaultId"
         case ownership
         case selectionrequired = "selectionRequired"
+        case sessionroutingcontract = "sessionRoutingContract"
         case mainkey = "mainKey"
         case scope
         case agents
