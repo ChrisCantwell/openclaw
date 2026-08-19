@@ -172,10 +172,15 @@ describe("doctor context-engine host compatibility", () => {
     expect(warnings).toEqual([]);
   });
 
-  it("repairs an incompatible context engine by switching the global slot to legacy", async () => {
+  it("repairs an incompatible context engine by resetting the global slot to legacy", async () => {
     const engineId = registerEngine(["assemble-before-prompt"]);
     const result = await maybeRepairContextEngineHostCompatibility({
       cfg: configWithEngine(engineId, {
+        plugins: {
+          slots: {
+            memory: "custom-memory",
+          },
+        },
         agents: {
           defaults: {
             model: "anthropic/claude-sonnet-4-6",
@@ -188,9 +193,9 @@ describe("doctor context-engine host compatibility", () => {
       doctorFixCommand: "openclaw doctor --fix",
     });
 
-    expect(result.config.plugins?.slots?.contextEngine).toBe("legacy");
+    expect(result.config.plugins?.slots).toEqual({ memory: "custom-memory" });
     expect(result.changes).toEqual([
-      `Set plugins.slots.contextEngine to "legacy" because context engine "${engineId}" is incompatible with every configured agent-run host.`,
+      `Reset plugins.slots.contextEngine to the default "legacy" because context engine "${engineId}" is incompatible with every configured agent-run host.`,
     ]);
   });
 
