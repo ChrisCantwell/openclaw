@@ -442,7 +442,7 @@ public struct OpenClawChatSessionRoutingIdentity: Equatable, Sendable {
             scope: scope,
             mainKey: mainSessionKey,
             defaultAgentID: defaultAgentID),
-              let display = OpenClawChatSessionRoutingContract.parse(displayContract)
+            let display = OpenClawChatSessionRoutingContract.parse(displayContract)
         else { return nil }
         let authoritativeContract = sessionRoutingContract?
             .trimmingCharacters(in: .whitespacesAndNewlines)
