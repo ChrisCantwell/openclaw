@@ -55,6 +55,7 @@ export function createHarness(
     publishAcceptedWorkspace?: Parameters<
       typeof createWorkerPlacementDispatchService
     >[0]["publishAcceptedWorkspace"];
+    afterMoveBegin?: () => void;
     deviceRunnerAvailable?: boolean;
   } = {},
 ) {
@@ -363,6 +364,7 @@ export function createHarness(
               status: options.deviceRunnerAvailable ? "available" : "offline",
             }
           : undefined,
+      version: () => 0,
     },
     workspaceOperations: options.workspaceOperations ?? createWorkerWorkspaceOperationCoordinator(),
     runLocalBarrier: async ({ authorize, startDispatch }) => {
@@ -385,6 +387,7 @@ export function createHarness(
     runMoveBarrier: async ({ authorize, begin }) => {
       authorize?.();
       const begun = begin();
+      options.afterMoveBegin?.();
       if (options.failMoveAfterBegin) {
         throw new Error("move barrier interrupted");
       }
