@@ -1055,7 +1055,8 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
         let explicitAgentID = WebChatRoute.normalizedAgentID(agentID)
         let effectiveAgentID = Self.effectiveAgentID(
             explicitAgentID: explicitAgentID,
-            cachedDefaultAgentID: cachedRoutingIdentity?.defaultAgentID)
+            cachedDefaultAgentID: cachedRoutingIdentity?.defaultAgentID,
+            selectionRequired: cachedRoutingIdentity?.selectionRequired ?? false)
         self.init(
             sessionKey: sessionKey,
             initialDraft: initialDraft,
@@ -1150,15 +1151,15 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
                     // default refreshes only supply the fallback route.
                     let effectiveAgentID = Self.effectiveAgentID(
                         explicitAgentID: explicitAgentID,
-                        cachedDefaultAgentID: routingIdentity.defaultAgentID)
+                        cachedDefaultAgentID: routingIdentity.defaultAgentID,
+                        selectionRequired: routingIdentity.selectionRequired)
                     (transport as? MacGatewayChatTransport)?
                         .updateDefaultGlobalAgentID(effectiveAgentID)
                     if let store = transcriptCache as? OpenClawChatSQLiteTranscriptCache,
-                       !usesPrimaryAppRuntime || store.gatewayID == MacChatTranscriptCache.currentGatewayID(),
-                       let persistedIdentity = OpenClawChatSessionRoutingIdentity(
-                           contract: routingIdentity.contract)
+                       !usesPrimaryAppRuntime || store.gatewayID == MacChatTranscriptCache.currentGatewayID()
                     {
-                        await store.storeSessionRoutingIdentity(persistedIdentity)
+                        // Persist the display default separately from the authoritative contract.
+                        await store.storeSessionRoutingIdentity(routingIdentity)
                     }
                     vm.syncDeliveryIdentity(
                         activeAgentId: effectiveAgentID,
@@ -1256,10 +1257,14 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
 
     static func effectiveAgentID(
         explicitAgentID: String?,
-        cachedDefaultAgentID: String?) -> String?
+        cachedDefaultAgentID: String?,
+        selectionRequired: Bool = false) -> String?
     {
-        WebChatRoute.normalizedAgentID(explicitAgentID)
-            ?? WebChatRoute.normalizedAgentID(cachedDefaultAgentID)
+        if let explicitAgentID = WebChatRoute.normalizedAgentID(explicitAgentID) {
+            return explicitAgentID
+        }
+        guard !selectionRequired else { return nil }
+        return WebChatRoute.normalizedAgentID(cachedDefaultAgentID)
     }
 
     private static func makeWindow(

@@ -413,9 +413,19 @@ struct ChatGatewayPayloadCodecTests {
 
     @Test func `routing identity decodes agent and canonical contract`() throws {
         let identity = try OpenClawChatGatewayPayloadCodec.decodeSessionRoutingIdentity(
+            Data(#"{"defaultId":"Work","mainKey":"Primary","scope":"per-sender","selectionRequired":true,"sessionRoutingContract":"per-sender|Primary|unowned","agents":[]}"#.utf8))
+
+        #expect(identity.defaultAgentID == "work")
+        #expect(identity.selectionRequired)
+        #expect(identity.contract == "per-sender|Primary|unowned")
+    }
+
+    @Test func `routing identity reconstructs legacy gateway contract`() throws {
+        let identity = try OpenClawChatGatewayPayloadCodec.decodeSessionRoutingIdentity(
             Data(#"{"defaultId":"Work","mainKey":"Primary","scope":"global","agents":[]}"#.utf8))
 
         #expect(identity.defaultAgentID == "work")
+        #expect(!identity.selectionRequired)
         #expect(identity.contract == "global|primary|work")
     }
 

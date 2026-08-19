@@ -328,15 +328,19 @@ public actor OpenClawChatSQLiteTranscriptCache: OpenClawChatTranscriptCache,
         let gatewayID = self.gatewayID
         do {
             try await self.databases.stateQueue.write { db in
+                try OpenClawClientDatabases.ensureSessionRoutingIdentityColumns(in: db)
                 try db.execute(
                     sql: """
                     INSERT INTO gateway_routing_identity(
-                        gateway_id, scope, main_session_key, default_agent_id, updated_at
-                    ) VALUES (?, ?, ?, ?, ?)
+                        gateway_id, scope, main_session_key, default_agent_id,
+                        routing_contract, selection_required, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(gateway_id) DO UPDATE SET
                         scope = excluded.scope,
                         main_session_key = excluded.main_session_key,
                         default_agent_id = excluded.default_agent_id,
+                        routing_contract = excluded.routing_contract,
+                        selection_required = excluded.selection_required,
                         updated_at = excluded.updated_at
                     """,
                     arguments: [
@@ -344,6 +348,8 @@ public actor OpenClawChatSQLiteTranscriptCache: OpenClawChatTranscriptCache,
                         identity.scope,
                         identity.mainSessionKey,
                         identity.defaultAgentID,
+                        identity.contract,
+                        identity.selectionRequired ? 1 : 0,
                         Date().timeIntervalSince1970,
                     ])
             }

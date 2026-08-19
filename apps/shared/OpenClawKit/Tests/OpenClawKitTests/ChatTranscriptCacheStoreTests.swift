@@ -730,13 +730,16 @@ final class ChatTranscriptCacheStoreTests: ClientDatabaseTestSuite, @unchecked S
         let identity = try #require(OpenClawChatSessionRoutingIdentity(
             scope: " Per-Sender ",
             mainSessionKey: " Work ",
-            defaultAgentID: " Main "))
+            defaultAgentID: " Main ",
+            selectionRequired: true,
+            sessionRoutingContract: "per-sender|work|unowned"))
         await databases.store(gatewayID: "gw-a").storeSessionRoutingIdentity(identity)
         try databases.close()
 
         let reopened = try OpenClawClientDatabases(directoryURL: directory)
         #expect(reopened.loadSessionRoutingIdentity(gatewayID: "gw-a") == identity)
-        #expect(identity.contract == "per-sender|work|main")
+        #expect(identity.contract == "per-sender|work|unowned")
+        #expect(identity.selectionRequired)
         #expect(try await reopened.stateQueue.read { db in
             try String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations")
         } == [
@@ -747,6 +750,39 @@ final class ChatTranscriptCacheStoreTests: ClientDatabaseTestSuite, @unchecked S
             "client-state-outbox-attempt-scope-v5",
             "client-state-outbox-attachment-rekey-v6",
         ])
+    }
+
+    @Test func `routing identity lazily upgrades the legacy table shape`() async throws {
+        try databases.close()
+        let stateURL = directory.appendingPathComponent("client-state.sqlite")
+        try withRawDatabase(at: stateURL) { raw in
+            execute(raw, "ALTER TABLE gateway_routing_identity RENAME TO gateway_routing_identity_new")
+            execute(raw, """
+            CREATE TABLE gateway_routing_identity(
+                gateway_id TEXT NOT NULL PRIMARY KEY,
+                scope TEXT NOT NULL,
+                main_session_key TEXT NOT NULL,
+                default_agent_id TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """)
+            execute(raw, "DROP TABLE gateway_routing_identity_new")
+        }
+        let reopened = try OpenClawClientDatabases(directoryURL: directory)
+        let identity = try #require(OpenClawChatSessionRoutingIdentity(
+            scope: "per-sender",
+            mainSessionKey: "main",
+            defaultAgentID: "main",
+            selectionRequired: true,
+            sessionRoutingContract: "per-sender|main|unowned"))
+
+        await reopened.store(gatewayID: "gw-a").storeSessionRoutingIdentity(identity)
+
+        #expect(reopened.loadSessionRoutingIdentity(gatewayID: "gw-a") == identity)
+        #expect(try await reopened.stateQueue.read { db in
+            Set(try db.columns(in: "gateway_routing_identity").map(\.name))
+                .isSuperset(of: ["routing_contract", "selection_required"])
+        })
     }
 }
 

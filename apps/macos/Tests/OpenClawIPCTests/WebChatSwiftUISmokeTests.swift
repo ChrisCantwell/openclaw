@@ -219,6 +219,30 @@ struct WebChatSwiftUISmokeTests {
         fallback.close()
     }
 
+    @Test func `controller refuses cached display default when gateway requires selection`() throws {
+        let cachedIdentity = try #require(OpenClawChatSessionRoutingIdentity(
+            scope: "per-sender",
+            mainSessionKey: "main",
+            defaultAgentID: "main",
+            selectionRequired: true,
+            sessionRoutingContract: "per-sender|main|unowned"))
+        let unresolved = WebChatSwiftUIWindowController(
+            sessionKey: "main",
+            agentID: nil,
+            cachedRoutingIdentity: cachedIdentity,
+            store: nil)
+        let explicit = WebChatSwiftUIWindowController(
+            sessionKey: "main",
+            agentID: " Work ",
+            cachedRoutingIdentity: cachedIdentity,
+            store: nil)
+
+        #expect(unresolved._testActiveAgentID == nil)
+        #expect(explicit._testActiveAgentID == "work")
+        unresolved.close()
+        explicit.close()
+    }
+
     @Test func `max and Ultra thinking preferences survive reopen`() throws {
         let suiteName = "WebChatSwiftUISmokeTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

@@ -2471,7 +2471,9 @@ private func overrideNotificationServingPreference(_ enabled: Bool) -> () -> Voi
         let identity = try #require(OpenClawChatSessionRoutingIdentity(
             scope: "per-sender",
             mainSessionKey: "restored-main",
-            defaultAgentID: "main"))
+            defaultAgentID: "main",
+            selectionRequired: true,
+            sessionRoutingContract: "per-sender|restored-main|unowned"))
         let store = databases.store(gatewayID: stableID)
         await store.storeSessionRoutingIdentity(identity)
         await store.retire()
@@ -2498,6 +2500,7 @@ private func overrideNotificationServingPreference(_ enabled: Bool) -> () -> Voi
 
         #expect(talkMode.isGatewayConnected)
         #expect(appModel.chatSessionRoutingContract == identity.contract)
+        #expect(appModel.chatDeliveryAgentId == nil)
         #expect(talkMode.isUsingMainSessionKey(appModel.chatSessionKey))
     }
 

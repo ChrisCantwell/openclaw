@@ -405,6 +405,8 @@ final class NodeAppModel {
 
     private var mainSessionBaseKey: String = "main"
     private var gatewaySessionScope: String?
+    private var gatewaySessionRoutingContract: String?
+    private var gatewayAgentSelectionRequired = false
     private var focusedChatSessionKey: String?
     // Two-part unread guard mirroring Android: the opened key survives read
     // confirmations so later unread episodes on the same open chat re-acknowledge;
@@ -728,6 +730,8 @@ final class NodeAppModel {
         self.gatewaySessionScope = identity.scope
         self.mainSessionBaseKey = identity.mainSessionKey
         self.gatewayDefaultAgentId = identity.defaultAgentID
+        self.gatewayAgentSelectionRequired = identity.selectionRequired
+        self.gatewaySessionRoutingContract = identity.contract
         self.synchronizeTalkSessionKey()
     }
 
@@ -1604,7 +1608,9 @@ final class NodeAppModel {
             let routingIdentity = OpenClawChatSessionRoutingIdentity(
                 scope: decoded.scope.value as? String,
                 mainSessionKey: decoded.mainkey,
-                defaultAgentID: decoded.defaultid)
+                defaultAgentID: decoded.defaultid,
+                selectionRequired: decoded.selectionrequired ?? false,
+                sessionRoutingContract: decoded.sessionroutingcontract)
             guard shouldApply(),
                   GatewayStableIdentifier.matches(self.chatTranscriptCacheGatewayID, sourceGatewayID)
             else { return }
@@ -1612,6 +1618,8 @@ final class NodeAppModel {
                 self.gatewayDefaultAgentId = decoded.defaultid
                 self.gatewayAgents = decoded.agents
                 self.gatewaySessionScope = decoded.scope.value as? String
+                self.gatewayAgentSelectionRequired = decoded.selectionrequired ?? false
+                self.gatewaySessionRoutingContract = routingIdentity?.contract
                 self.applyMainSessionKey(decoded.mainkey)
 
                 let selected = (self.selectedAgentId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3447,12 +3455,13 @@ extension NodeAppModel {
         }
         let selected = (self.selectedAgentId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if !selected.isEmpty { return selected.lowercased() }
+        guard !self.gatewayAgentSelectionRequired else { return nil }
         let defaultId = (self.gatewayDefaultAgentId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return defaultId.isEmpty ? nil : defaultId.lowercased()
     }
 
     var chatSessionRoutingContract: String? {
-        OpenClawChatSessionRoutingContract.make(
+        self.gatewaySessionRoutingContract ?? OpenClawChatSessionRoutingContract.make(
             scope: self.gatewaySessionScope,
             mainKey: self.mainSessionBaseKey,
             defaultAgentID: self.gatewayDefaultAgentId)
@@ -3843,6 +3852,8 @@ extension NodeAppModel {
         LiveActivityManager.shared.endActivity(reason: "new_gateway_connect")
         self.mainSessionBaseKey = "main"
         self.gatewaySessionScope = nil
+        self.gatewaySessionRoutingContract = nil
+        self.gatewayAgentSelectionRequired = false
         self.gatewayDefaultAgentId = nil
         self.gatewayAgents = []
         self.selectedAgentId = GatewaySettingsStore.loadGatewaySelectedAgentId(stableID: stableID)
@@ -5108,6 +5119,8 @@ extension NodeAppModel {
     private func configureLocalGatewayFixtureSession(agents: [AgentSummary]) {
         self.mainSessionBaseKey = "main"
         self.gatewaySessionScope = "per-sender"
+        self.gatewaySessionRoutingContract = "per-sender|main|main"
+        self.gatewayAgentSelectionRequired = false
         self.selectedAgentId = nil
         self.gatewayDefaultAgentId = "main"
         self.gatewayAgents = agents

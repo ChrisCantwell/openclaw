@@ -410,6 +410,7 @@ public struct OpenClawChatSessionRoutingIdentity: Equatable, Sendable {
     public let scope: String
     public let mainSessionKey: String
     public let defaultAgentID: String
+    public let selectionRequired: Bool
     public let contract: String
 
     public init?(contract: String?) {
@@ -417,15 +418,42 @@ public struct OpenClawChatSessionRoutingIdentity: Equatable, Sendable {
         self.scope = components.scope
         self.mainSessionKey = components.mainKey
         self.defaultAgentID = components.defaultAgentID
+        self.selectionRequired = false
         self.contract = "\(components.scope)|\(components.mainKey)|\(components.defaultAgentID)"
     }
 
     public init?(scope: String?, mainSessionKey: String?, defaultAgentID: String?) {
-        guard let contract = OpenClawChatSessionRoutingContract.make(
+        self.init(
+            scope: scope,
+            mainSessionKey: mainSessionKey,
+            defaultAgentID: defaultAgentID,
+            selectionRequired: false,
+            sessionRoutingContract: nil)
+    }
+
+    public init?(
+        scope: String?,
+        mainSessionKey: String?,
+        defaultAgentID: String?,
+        selectionRequired: Bool,
+        sessionRoutingContract: String?)
+    {
+        guard let displayContract = OpenClawChatSessionRoutingContract.make(
             scope: scope,
             mainKey: mainSessionKey,
-            defaultAgentID: defaultAgentID)
+            defaultAgentID: defaultAgentID),
+              let display = OpenClawChatSessionRoutingContract.parse(displayContract)
         else { return nil }
-        self.init(contract: contract)
+        let authoritativeContract = sessionRoutingContract?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.scope = display.scope
+        self.mainSessionKey = display.mainKey
+        self.defaultAgentID = display.defaultAgentID
+        self.selectionRequired = selectionRequired
+        if let authoritativeContract, !authoritativeContract.isEmpty {
+            self.contract = authoritativeContract
+        } else {
+            self.contract = displayContract
+        }
     }
 }
