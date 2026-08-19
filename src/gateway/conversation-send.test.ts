@@ -15,6 +15,7 @@ const conversation = {
   channel: "reef",
   accountId: "default",
   kind: "direct" as const,
+  peerId: "molty",
   target: "reef:molty",
   sessionId: "reef-session",
   sessionKey: "agent:main:reef:direct:molty",
@@ -138,7 +139,16 @@ describe("runGatewayConversationSend", () => {
     const deps = createDeps();
     const result = await runGatewayConversationSend(
       {
-        config: {},
+        config: {
+          agents: { entries: { main: {}, finance: {} } },
+          bindings: [
+            {
+              type: "route",
+              agentId: "main",
+              match: { channel: "reef", accountId: "default" },
+            },
+          ],
+        },
         agentId: "main",
         senderIsOwner: true,
         sourceSessionKey: "agent:main:telegram:direct:operator",
@@ -215,7 +225,7 @@ describe("runGatewayConversationSend", () => {
 
     await runGatewayConversationSend(
       {
-        config: {},
+        config: { agents: { entries: { main: {} } } },
         agentId: "main",
         senderIsOwner: true,
         operationId: "shared-operation",
@@ -226,7 +236,7 @@ describe("runGatewayConversationSend", () => {
     );
     await runGatewayConversationSend(
       {
-        config: {},
+        config: { agents: { entries: { worker: {} } } },
         agentId: "worker",
         senderIsOwner: true,
         operationId: "shared-operation",
@@ -254,6 +264,35 @@ describe("runGatewayConversationSend", () => {
           agentId: "main",
           senderIsOwner: true,
           operationId: "send-missing",
+          conversationRef: conversation.conversationRef,
+          message: "hello",
+        },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(ConversationInputError);
+    expect(deps.beginOperation).not.toHaveBeenCalled();
+    expect(deps.runMessageAction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stored conversation route owned by another agent", async () => {
+    const deps = createDeps();
+
+    await expect(
+      runGatewayConversationSend(
+        {
+          config: {
+            agents: { entries: { main: {}, finance: {} } },
+            bindings: [
+              {
+                type: "route",
+                agentId: "finance",
+                match: { channel: "reef", accountId: "default" },
+              },
+            ],
+          },
+          agentId: "main",
+          senderIsOwner: true,
+          operationId: "send-sibling-route",
           conversationRef: conversation.conversationRef,
           message: "hello",
         },

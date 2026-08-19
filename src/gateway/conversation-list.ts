@@ -20,6 +20,7 @@ import { resolveOutboundChannelPlugin } from "../infra/outbound/channel-resoluti
 import { resolveOutboundSessionRoute } from "../infra/outbound/outbound-session.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { defaultRuntime } from "../runtime.js";
+import { isConversationRouteOwnedByAgent } from "./conversation-route-ownership.js";
 
 const log = createSubsystemLogger("gateway/conversations");
 
@@ -173,6 +174,17 @@ async function discoverChannelAddresses(params: {
         },
       });
       if (!route) {
+        continue;
+      }
+      if (
+        !isConversationRouteOwnedByAgent({
+          config: params.config,
+          agentId: params.agentId,
+          channel: plugin.id,
+          accountId,
+          peer: route.peer,
+        })
+      ) {
         continue;
       }
       const identity = buildConversationIdentity({

@@ -18,6 +18,7 @@ const conversation = {
   channel: "reef",
   accountId: "default",
   kind: "direct" as const,
+  peerId: "molty",
   target: "reef:molty",
   sessionId: "reef-session",
   sessionKey: "agent:main:reef:direct:molty",
@@ -477,6 +478,37 @@ describe("runGatewayConversationTurn", () => {
     ).rejects.toBeInstanceOf(ConversationInputError);
     expect(deps.resolveOutboundChannelPlugin).not.toHaveBeenCalled();
     expect(deps.registerPendingConversationTurn).not.toHaveBeenCalled();
+    expect(deps.runMessageAction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stored conversation route owned by another agent", async () => {
+    const deps = createDeps();
+
+    await expect(
+      runGatewayConversationTurn(
+        {
+          config: {
+            agents: { entries: { main: {}, finance: {} } },
+            bindings: [
+              {
+                type: "route",
+                agentId: "finance",
+                match: { channel: "reef", accountId: "default" },
+              },
+            ],
+          },
+          agentId: "main",
+          senderIsOwner: true,
+          turnId: "turn-sibling-route",
+          conversationRef: conversation.conversationRef,
+          message: "hello",
+          timeoutMs: 1,
+        },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(ConversationInputError);
+    expect(deps.resolveOutboundChannelPlugin).not.toHaveBeenCalled();
+    expect(deps.beginOperation).not.toHaveBeenCalled();
     expect(deps.runMessageAction).not.toHaveBeenCalled();
   });
 

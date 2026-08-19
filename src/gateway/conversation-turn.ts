@@ -24,6 +24,7 @@ import {
   ConversationInputError,
   ConversationOperationConflictError,
 } from "./conversation-errors.js";
+import { isConversationRouteOwnedByAgent } from "./conversation-route-ownership.js";
 
 type ConversationTurnDeps = ConversationDeliveryDeps & {
   registerPendingConversationTurn: typeof registerPendingConversationTurn;
@@ -243,6 +244,19 @@ export async function runGatewayConversationTurn(
   if (!discoveredConversation) {
     throw new ConversationInputError(
       `Conversation not found: ${params.conversationRef} (use conversations_list)`,
+    );
+  }
+  if (
+    !isConversationRouteOwnedByAgent({
+      config: params.config,
+      agentId: params.agentId,
+      channel: discoveredConversation.channel,
+      accountId: discoveredConversation.accountId,
+      peer: { kind: discoveredConversation.kind, id: discoveredConversation.peerId },
+    })
+  ) {
+    throw new ConversationInputError(
+      `Conversation is no longer available to this agent: ${params.conversationRef} (use conversations_list)`,
     );
   }
   const plugin = deps.resolveOutboundChannelPlugin({

@@ -19,6 +19,7 @@ export type ConversationRecord = {
   channel: string;
   accountId: string;
   kind: ConversationKind;
+  peerId: string;
   target: string;
   parentConversationRef?: string;
   threadId?: string;
@@ -96,6 +97,7 @@ function mapConversationRow(row: {
     channel: row.channel,
     accountId: row.account_id,
     kind: row.kind,
+    peerId: row.peer_id,
     target: row.delivery_target,
     ...(row.parent_conversation_id ? { parentConversationRef: row.parent_conversation_id } : {}),
     ...(row.thread_id ? { threadId: row.thread_id } : {}),

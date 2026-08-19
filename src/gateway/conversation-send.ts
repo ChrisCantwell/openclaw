@@ -18,6 +18,7 @@ import {
   ConversationInputError,
   ConversationOperationConflictError,
 } from "./conversation-errors.js";
+import { isConversationRouteOwnedByAgent } from "./conversation-route-ownership.js";
 
 type ConversationSendDeps = ConversationDeliveryDeps & {
   resolveConversation: typeof resolveConversation;
@@ -102,6 +103,19 @@ export async function runGatewayConversationSend(
     if (!conversation) {
       throw new ConversationInputError(
         `Conversation not found: ${params.conversationRef} (use conversations_list)`,
+      );
+    }
+    if (
+      !isConversationRouteOwnedByAgent({
+        config: params.config,
+        agentId: params.agentId,
+        channel: conversation.channel,
+        accountId: conversation.accountId,
+        peer: { kind: conversation.kind, id: conversation.peerId },
+      })
+    ) {
+      throw new ConversationInputError(
+        `Conversation is no longer available to this agent: ${params.conversationRef} (use conversations_list)`,
       );
     }
     const sent = await sendGatewayConversationMessage({

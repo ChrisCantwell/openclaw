@@ -82,6 +82,66 @@ describe("runGatewayConversationList", () => {
     expect(result.conversations[0]).not.toHaveProperty("sessionId");
   });
 
+  it("discovers only routes owned by the active agent", async () => {
+    let discovered: ConversationIdentity[] = [];
+    const deps = {
+      resolveOutboundChannelPlugin: vi.fn(() => ({
+        id: "reef",
+        config: {
+          listAccountIds: () => ["personal", "finance"],
+          resolveAccount: () => ({ enabled: true, configured: true }),
+          isEnabled: () => true,
+          isConfigured: () => true,
+        },
+        directory: {
+          listPeers: async ({ accountId }: { accountId: string }) => [
+            { kind: "user" as const, id: `${accountId}-peer`, name: accountId },
+          ],
+        },
+      })),
+      resolveOutboundSessionRoute: vi.fn(async ({ target }: { target: string }) => ({
+        sessionKey: `agent:personal:reef:direct:${target}`,
+        baseSessionKey: `agent:personal:reef:direct:${target}`,
+        peer: { kind: "direct" as const, id: target },
+        chatType: "direct" as const,
+        from: `reef:${target}`,
+        to: `reef:${target}`,
+      })),
+      registerConversationAddresses: vi.fn((_scope, identities) => {
+        discovered = [...identities];
+      }),
+      listConversations: vi.fn(() => []),
+    };
+
+    await runGatewayConversationList(
+      {
+        config: {
+          agents: { entries: { personal: {}, finance: {} } },
+          bindings: [
+            {
+              type: "route",
+              agentId: "personal",
+              match: { channel: "reef", accountId: "personal" },
+            },
+            {
+              type: "route",
+              agentId: "finance",
+              match: { channel: "reef", accountId: "finance" },
+            },
+          ],
+        },
+        agentId: "personal",
+        channel: "reef",
+        limit: 50,
+      },
+      deps as never,
+    );
+
+    expect(discovered).toEqual([
+      expect.objectContaining({ accountId: "personal", peerId: "personal-peer" }),
+    ]);
+  });
+
   it("keeps route identity separate from its delivery address", async () => {
     let discovered: ConversationIdentity[] = [];
     const deps = {
