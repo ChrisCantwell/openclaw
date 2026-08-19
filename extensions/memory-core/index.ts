@@ -17,7 +17,7 @@ import type { OpenKeyedStoreOptions } from "openclaw/plugin-sdk/plugin-state-run
 import type { TSchema } from "typebox";
 import { configureMemoryCoreDreamingState } from "./src/dreaming-state.js";
 import { registerShortTermPromotionDreaming } from "./src/dreaming.js";
-import { buildMemoryFlushPlan } from "./src/flush-plan.js";
+import { buildMemoryFlushPlan, buildMemoryWriteProvenancePlan } from "./src/flush-plan.js";
 import type { MemoryCoreAcquireLocalService } from "./src/memory/embedding-local-service.js";
 import type { MemoryCoreRuntimeHost } from "./src/memory/runtime-host.js";
 import { buildPromptSection } from "./src/prompt-section.js";
@@ -290,6 +290,7 @@ export default definePluginEntry({
     api.registerMemoryCapability({
       promptBuilder: buildPromptSection,
       flushPlanResolver: buildMemoryFlushPlan,
+      writeProvenance: buildMemoryWriteProvenancePlan(),
       runtime: memoryRuntime,
       publicArtifacts: {
         async listArtifacts(params) {
