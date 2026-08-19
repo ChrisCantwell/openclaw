@@ -29,6 +29,8 @@ export type ConversationRecord = {
   sessionId?: string;
   sessionKey?: string;
   role?: "participant" | "primary" | "related";
+  /** True when this address has been linked to a session in this agent's store. */
+  observedFromSession?: true;
   firstSeenAt: number;
   lastSeenAt: number;
 };
@@ -113,6 +115,7 @@ function mapConversationRow(row: {
           role,
         }
       : {}),
+    ...(role ? { observedFromSession: true as const } : {}),
     firstSeenAt: row.first_seen_at ?? row.conversation_created_at,
     lastSeenAt: row.last_seen_at ?? row.conversation_updated_at,
   };

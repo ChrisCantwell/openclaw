@@ -73,6 +73,7 @@ describe("conversation registry", () => {
     ]);
     expect(conversations.every((entry) => entry.role === "participant")).toBe(true);
     expect(conversations.every((entry) => entry.sessionKey === scope.sessionKey)).toBe(true);
+    expect(conversations.every((entry) => entry.observedFromSession === true)).toBe(true);
 
     const peerA = conversations.find((entry) => entry.target === "reef:peer-a");
     expect(peerA).toBeDefined();
@@ -105,6 +106,7 @@ describe("conversation registry", () => {
     expect(conversation?.sessionId).toBeUndefined();
     expect(conversation?.sessionKey).toBeUndefined();
     expect(conversation?.role).toBeUndefined();
+    expect(conversation?.observedFromSession).toBeUndefined();
     expect(resolveConversation({ agentId: "main", storePath }, identity!.conversationRef)).toEqual(
       conversation,
     );
@@ -244,6 +246,7 @@ describe("conversation registry", () => {
     ).toMatchObject({
       conversationRef: linked?.conversationRef,
       target: "reef:peer-a",
+      observedFromSession: true,
     });
     expect(
       resolveConversation({ agentId: "main", storePath }, linked?.conversationRef ?? "missing"),

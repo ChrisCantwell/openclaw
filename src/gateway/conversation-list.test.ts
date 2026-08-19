@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ConversationIdentity } from "../config/sessions/conversation-identity.js";
+import type { ConversationRecord } from "../config/sessions/conversation-registry.js";
 import { runGatewayConversationList } from "./conversation-list.js";
 
 describe("runGatewayConversationList", () => {
@@ -37,6 +38,7 @@ describe("runGatewayConversationList", () => {
           channel: identity.channel,
           accountId: identity.accountId,
           kind: identity.kind,
+          peerId: identity.peerId,
           target: identity.deliveryTarget,
           label: identity.label,
           firstSeenAt: 100,
@@ -140,6 +142,122 @@ describe("runGatewayConversationList", () => {
     expect(discovered).toEqual([
       expect.objectContaining({ accountId: "personal", peerId: "personal-peer" }),
     ]);
+  });
+
+  it.each([
+    { name: "without a channel", input: {} },
+    { name: "with a channel", input: { channel: "reef" } },
+    { name: "with a query", input: { query: "peer" } },
+  ])("filters persisted foreign routes $name before applying the limit", async ({ input }) => {
+    const personal = {
+      conversationRef: "conv_11111111111111111111111111111111",
+      channel: "reef",
+      accountId: "personal",
+      kind: "direct" as const,
+      peerId: "personal-peer",
+      target: "reef:personal-peer",
+      firstSeenAt: 100,
+      lastSeenAt: 100,
+    };
+    const finance = {
+      conversationRef: "conv_22222222222222222222222222222222",
+      channel: "reef",
+      accountId: "finance",
+      kind: "direct" as const,
+      peerId: "finance-peer",
+      target: "reef:finance-peer",
+      firstSeenAt: 200,
+      lastSeenAt: 200,
+    };
+    const deps = {
+      resolveOutboundChannelPlugin: vi.fn(() => undefined),
+      resolveOutboundSessionRoute: vi.fn(),
+      registerConversationAddresses: vi.fn(),
+      listConversations: vi.fn(() => [finance, personal]),
+    };
+
+    const result = await runGatewayConversationList(
+      {
+        config: {
+          agents: { entries: { personal: {}, finance: {} } },
+          bindings: [
+            {
+              type: "route",
+              agentId: "personal",
+              match: { channel: "reef", accountId: "personal" },
+            },
+            {
+              type: "route",
+              agentId: "finance",
+              match: { channel: "reef", accountId: "finance" },
+            },
+          ],
+        },
+        agentId: "personal",
+        limit: 1,
+        ...input,
+      },
+      deps as never,
+    );
+
+    expect(result.conversations).toEqual([
+      expect.objectContaining({ conversationRef: personal.conversationRef }),
+    ]);
+    expect(deps.listConversations).toHaveBeenCalledWith(
+      { agentId: "personal" },
+      input.channel ? { channel: "reef" } : {},
+    );
+  });
+
+  it("keeps an observed contextual route but hides the same directory-only route", async () => {
+    const contextual: ConversationRecord = {
+      conversationRef: "conv_33333333333333333333333333333333",
+      channel: "reef",
+      accountId: "default",
+      kind: "channel" as const,
+      peerId: "support-room",
+      target: "channel:support-room",
+      firstSeenAt: 100,
+      lastSeenAt: 100,
+    };
+    const deps = {
+      resolveOutboundChannelPlugin: vi.fn(() => undefined),
+      resolveOutboundSessionRoute: vi.fn(),
+      registerConversationAddresses: vi.fn(),
+      listConversations: vi.fn(() => [contextual]),
+    };
+    const params = {
+      config: {
+        agents: { entries: { main: {}, finance: {} } },
+        bindings: [
+          {
+            type: "route" as const,
+            agentId: "finance",
+            match: {
+              channel: "reef",
+              accountId: "default",
+              guildId: "support-guild",
+              roles: ["support"],
+            },
+          },
+          {
+            type: "route" as const,
+            agentId: "main",
+            match: { channel: "reef", accountId: "default" },
+          },
+        ],
+      },
+      agentId: "finance",
+      limit: 10,
+    };
+
+    await expect(runGatewayConversationList(params, deps as never)).resolves.toEqual({
+      conversations: [],
+    });
+    deps.listConversations.mockReturnValueOnce([{ ...contextual, observedFromSession: true }]);
+    await expect(runGatewayConversationList(params, deps as never)).resolves.toEqual({
+      conversations: [expect.objectContaining({ conversationRef: contextual.conversationRef })],
+    });
   });
 
   it("keeps route identity separate from its delivery address", async () => {

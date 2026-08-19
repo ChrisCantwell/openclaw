@@ -20,7 +20,7 @@ import { resolveOutboundChannelPlugin } from "../infra/outbound/channel-resoluti
 import { resolveOutboundSessionRoute } from "../infra/outbound/outbound-session.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { defaultRuntime } from "../runtime.js";
-import { isConversationRouteOwnedByAgent } from "./conversation-route-ownership.js";
+import { isConversationRouteEligibleForAgent } from "./conversation-route-ownership.js";
 
 const log = createSubsystemLogger("gateway/conversations");
 
@@ -177,12 +177,15 @@ async function discoverChannelAddresses(params: {
         continue;
       }
       if (
-        !isConversationRouteOwnedByAgent({
+        !isConversationRouteEligibleForAgent({
           config: params.config,
           agentId: params.agentId,
-          channel: plugin.id,
-          accountId,
-          peer: route.peer,
+          conversation: {
+            channel: plugin.id,
+            accountId,
+            kind: route.peer.kind,
+            peerId: route.peer.id,
+          },
         })
       ) {
         continue;
@@ -245,18 +248,25 @@ export async function runGatewayConversationList(
         deps,
       })
     : undefined;
-  const conversations = deps.listConversations(scope, {
-    ...(query ? {} : { limit: params.limit }),
-    ...(discovery ? { channel: discovery.channel } : {}),
-  });
+  const conversations = deps.listConversations(
+    scope,
+    discovery ? { channel: discovery.channel } : {},
+  );
+  const eligible = conversations.filter((conversation) =>
+    isConversationRouteEligibleForAgent({
+      config: params.config,
+      agentId: params.agentId,
+      conversation,
+    }),
+  );
   const selected = query
-    ? conversations
+    ? eligible
         .filter(
           (entry) =>
             discovery?.discoveredConversationRefs.has(entry.conversationRef) === true ||
             matchesConversationQuery(entry, query),
         )
         .slice(0, params.limit)
-    : conversations;
+    : eligible.slice(0, params.limit);
   return { conversations: selected.map(presentConversation) };
 }

@@ -303,6 +303,54 @@ describe("runGatewayConversationSend", () => {
     expect(deps.runMessageAction).not.toHaveBeenCalled();
   });
 
+  it("allows a session-observed route selected by contextual bindings", async () => {
+    const deps = createDeps();
+    deps.resolveConversation.mockReturnValue({
+      ...conversation,
+      kind: "channel",
+      peerId: "support-room",
+      target: "channel:support-room",
+      sessionId: "finance-support-room",
+      sessionKey: "agent:finance:reef:channel:support-room",
+      role: "primary",
+      observedFromSession: true,
+    } as never);
+
+    await expect(
+      runGatewayConversationSend(
+        {
+          config: {
+            agents: { entries: { main: {}, finance: {} } },
+            bindings: [
+              {
+                type: "route",
+                agentId: "finance",
+                match: {
+                  channel: "reef",
+                  accountId: "default",
+                  guildId: "support-guild",
+                  roles: ["support"],
+                },
+              },
+              {
+                type: "route",
+                agentId: "main",
+                match: { channel: "reef", accountId: "default" },
+              },
+            ],
+          },
+          agentId: "finance",
+          senderIsOwner: true,
+          operationId: "send-contextual-route",
+          conversationRef: conversation.conversationRef,
+          message: "hello",
+        },
+        deps,
+      ),
+    ).resolves.toMatchObject({ status: "sent" });
+    expect(deps.runMessageAction).toHaveBeenCalledOnce();
+  });
+
   it("preserves durable operation conflicts for Gateway identity recovery", async () => {
     const deps = createDeps();
     deps.operations.set("send-reused", {

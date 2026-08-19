@@ -24,7 +24,7 @@ import {
   ConversationInputError,
   ConversationOperationConflictError,
 } from "./conversation-errors.js";
-import { isConversationRouteOwnedByAgent } from "./conversation-route-ownership.js";
+import { isConversationRouteEligibleForAgent } from "./conversation-route-ownership.js";
 
 type ConversationTurnDeps = ConversationDeliveryDeps & {
   registerPendingConversationTurn: typeof registerPendingConversationTurn;
@@ -247,12 +247,10 @@ export async function runGatewayConversationTurn(
     );
   }
   if (
-    !isConversationRouteOwnedByAgent({
+    !isConversationRouteEligibleForAgent({
       config: params.config,
       agentId: params.agentId,
-      channel: discoveredConversation.channel,
-      accountId: discoveredConversation.accountId,
-      peer: { kind: discoveredConversation.kind, id: discoveredConversation.peerId },
+      conversation: discoveredConversation,
     })
   ) {
     throw new ConversationInputError(
