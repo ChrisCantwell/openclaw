@@ -842,7 +842,7 @@ extension OpenClawClientDatabases {
                         mainSessionKey: row["main_session_key"],
                         defaultAgentID: row["default_agent_id"],
                         routingContract: row["routing_contract"],
-                        selectionRequired: (row["selection_required"] as Int) == 1,
+                        selectionRequired: (row["selection_required"] as Int?) == 1,
                         updatedAt: row["updated_at"])
                 }
             }

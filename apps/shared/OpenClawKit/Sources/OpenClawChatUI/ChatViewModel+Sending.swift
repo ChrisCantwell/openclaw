@@ -19,6 +19,15 @@ extension OpenClawChatViewModel {
             self.hasDraftToSend
     }
 
+    public var requiresExplicitAgentSelection: Bool {
+        guard self.currentSessionSnapshot().deliveryAgentID == nil else { return false }
+        return OpenClawChatSessionRoutingContract.parse(self.sessionRoutingContract)?.defaultAgentID == "unowned"
+    }
+
+    public func availableAgentsForSelection() async throws -> [OpenClawChatAgentChoice] {
+        try await self.transport.listAgents()?.agents ?? []
+    }
+
     public var hasDraftToSend: Bool {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty || !attachments.isEmpty
@@ -359,6 +368,10 @@ extension OpenClawChatViewModel {
     }
 
     private func performSend() async {
+        guard !self.requiresExplicitAgentSelection else {
+            errorText = "Select an agent before sending this message."
+            return
+        }
         guard let draft = captureSendDraft() else { return }
 
         // Own every asynchronous validation/probe below. Slash catalog lookup

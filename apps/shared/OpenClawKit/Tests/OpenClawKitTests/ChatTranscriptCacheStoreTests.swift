@@ -991,6 +991,8 @@ final class ClientDatabaseLegacyImportTests: TemporaryDatabaseTestSuite, @unchec
                 scope TEXT NOT NULL,
                 main_session_key TEXT NOT NULL,
                 default_agent_id TEXT NOT NULL,
+                routing_contract TEXT,
+                selection_required INTEGER,
                 updated_at REAL NOT NULL
             );
             """)
@@ -1023,6 +1025,7 @@ final class ClientDatabaseLegacyImportTests: TemporaryDatabaseTestSuite, @unchec
         #expect(command.id == "legacy-v6")
         #expect(command.attachments == [attachment])
         #expect(databases.loadSessionRoutingIdentity(gatewayID: "gw-a")?.contract == "per-sender|main|main")
+        #expect(databases.loadSessionRoutingIdentity(gatewayID: "gw-a")?.selectionRequired == false)
         #expect(!FileManager.default.fileExists(atPath: legacyURL.path))
     }
 

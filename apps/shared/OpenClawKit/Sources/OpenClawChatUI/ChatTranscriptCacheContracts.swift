@@ -452,6 +452,13 @@ public struct OpenClawChatSessionRoutingIdentity: Equatable, Sendable {
         self.selectionRequired = selectionRequired
         if let authoritativeContract, !authoritativeContract.isEmpty {
             self.contract = authoritativeContract
+        } else if selectionRequired,
+                  let unownedContract = OpenClawChatSessionRoutingContract.make(
+                      scope: display.scope,
+                      mainKey: display.mainKey,
+                      defaultAgentID: "unowned")
+        {
+            self.contract = unownedContract
         } else {
             self.contract = displayContract
         }

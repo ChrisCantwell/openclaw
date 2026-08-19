@@ -611,6 +611,21 @@ struct RootTabsPresentationTests {
         #expect(RootSidebar.shownAgentCount(configured: 1, total: 0) == 1)
     }
 
+    @Test func `sidebar does not present the display default as selected when ownership is explicit`() {
+        #expect(RootSidebar.currentAgentID(
+            selectedAgentID: nil,
+            defaultAgentID: "main",
+            selectionRequired: true).isEmpty)
+        #expect(RootSidebar.currentAgentID(
+            selectedAgentID: "research",
+            defaultAgentID: "main",
+            selectionRequired: true) == "research")
+        #expect(RootSidebar.currentAgentID(
+            selectedAgentID: nil,
+            defaultAgentID: "main",
+            selectionRequired: false) == "main")
+    }
+
     @Test func `sidebar agent badges use canonical identity fallback`() {
         #expect(RootSidebar.agentBadge(
             name: "Research Agent",

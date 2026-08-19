@@ -406,7 +406,7 @@ final class NodeAppModel {
     private var mainSessionBaseKey: String = "main"
     private var gatewaySessionScope: String?
     private var gatewaySessionRoutingContract: String?
-    private var gatewayAgentSelectionRequired = false
+    private(set) var gatewayAgentSelectionRequired = false
     private var focusedChatSessionKey: String?
     // Two-part unread guard mirroring Android: the opened key survives read
     // confirmations so later unread episodes on the same open chat re-acknowledge;

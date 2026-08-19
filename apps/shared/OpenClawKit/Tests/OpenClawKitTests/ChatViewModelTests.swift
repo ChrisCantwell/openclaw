@@ -3164,6 +3164,44 @@ struct ChatViewModelTests {
         #expect(await MainActor.run { vm.canSend })
     }
 
+    @Test func `unowned routing contract requires explicit agent before send`() async throws {
+        let (transport, vm) = await makeViewModel(
+            historyResponses: [historyPayload()],
+            sessionRoutingContract: "per-sender|main|unowned")
+
+        await MainActor.run {
+            vm.input = "choose an owner first"
+            // Keep the control actionable so the refusal explains how to recover.
+            #expect(vm.canSend)
+            vm.send()
+        }
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(await transport.sentMessages().isEmpty)
+        #expect(await MainActor.run { vm.errorText } == "Select an agent before sending this message.")
+
+        let (_, explicit) = await makeViewModel(
+            activeAgentId: "Research",
+            historyResponses: [historyPayload()],
+            sessionRoutingContract: "per-sender|main|unowned")
+        await MainActor.run {
+            explicit.input = "owned message"
+            #expect(explicit.canSend)
+        }
+    }
+
+    @Test func `unowned routing contract requires explicit agent before new session`() async throws {
+        let (transport, vm) = await makeViewModel(
+            historyResponses: [historyPayload()],
+            sessionRoutingContract: "per-sender|main|unowned")
+
+        let created = await vm.startNewSession()
+
+        #expect(!created)
+        #expect(await transport.createdSessionKeys().isEmpty)
+        #expect(await MainActor.run { vm.errorText } == "Select an agent before starting a new chat.")
+    }
+
     @Test func `foreground clears completed run without assistant output`() async throws {
         let activeHistory = historyPayload(
             messages: [chatTextMessage(role: "user", text: "quiet task", timestamp: 1)],
