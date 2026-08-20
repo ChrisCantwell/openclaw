@@ -113,6 +113,7 @@ describe("conversation registry", () => {
   });
 
   it("keeps route context scoped to each agent in a shared store", async () => {
+    const sharedStorePath = path.join(tempDir, "shared.sqlite");
     for (const [agentId, role] of [
       ["finance", "finance"],
       ["support", "support"],
@@ -121,7 +122,7 @@ describe("conversation registry", () => {
         {
           agentId,
           sessionKey: `agent:${agentId}:discord:channel:ops`,
-          storePath,
+          storePath: sharedStorePath,
         },
         {
           sessionId: `${agentId}-ops-session`,
@@ -133,18 +134,122 @@ describe("conversation registry", () => {
       );
     }
 
-    expect(listConversations({ agentId: "finance", storePath }, { channel: "discord" })).toEqual([
+    expect(
+      listConversations({ agentId: "finance", storePath: sharedStorePath }, { channel: "discord" }),
+    ).toEqual([
       expect.objectContaining({
         sessionKey: "agent:finance:discord:channel:ops",
         routeContext: { guildId: "guild-a", memberRoleIds: ["finance"] },
       }),
     ]);
-    expect(listConversations({ agentId: "support", storePath }, { channel: "discord" })).toEqual([
+    expect(
+      listConversations({ agentId: "support", storePath: sharedStorePath }, { channel: "discord" }),
+    ).toEqual([
       expect.objectContaining({
         sessionKey: "agent:support:discord:channel:ops",
         routeContext: { guildId: "guild-a", memberRoleIds: ["support"] },
       }),
     ]);
+  });
+
+  it("keeps route context scoped to each conversation in a shared session", async () => {
+    const scope = { agentId: "main", sessionKey: "agent:main:main", storePath };
+    await upsertSessionEntry(scope, {
+      sessionId: "shared-session",
+      updatedAt: 100,
+      chatType: "channel",
+      deliveryContext: { channel: "discord", accountId: "default", to: "channel:alpha" },
+      conversationRouteContext: { guildId: "guild-alpha", memberRoleIds: ["alpha"] },
+    });
+    await upsertSessionEntry(scope, {
+      sessionId: "shared-session",
+      updatedAt: 200,
+      chatType: "channel",
+      deliveryContext: { channel: "discord", accountId: "default", to: "channel:beta" },
+      conversationRouteContext: { guildId: "guild-beta", memberRoleIds: ["beta"] },
+    });
+
+    expect(
+      listConversations({ agentId: "main", storePath }, { channel: "discord" }).map(
+        ({ target, routeContext }) => ({ target, routeContext }),
+      ),
+    ).toEqual([
+      {
+        target: "channel:beta",
+        routeContext: { guildId: "guild-beta", memberRoleIds: ["beta"] },
+      },
+      {
+        target: "channel:alpha",
+        routeContext: { guildId: "guild-alpha", memberRoleIds: ["alpha"] },
+      },
+    ]);
+  });
+
+  it("retains conversations associated with the global session", async () => {
+    await upsertSessionEntry(
+      { agentId: "main", sessionKey: "global", storePath },
+      {
+        sessionId: "global-session",
+        updatedAt: 100,
+        chatType: "direct",
+        deliveryContext: { channel: "reef", accountId: "default", to: "reef:peer-a" },
+      },
+    );
+
+    expect(listConversations({ agentId: "main", storePath }, { channel: "reef" })).toEqual([
+      expect.objectContaining({
+        sessionId: "global-session",
+        sessionKey: "global",
+        target: "reef:peer-a",
+      }),
+    ]);
+  });
+
+  it("retains a foreign-associated directory address as an unbound candidate", async () => {
+    const sharedStorePath = path.join(tempDir, "shared.sqlite");
+    const deliveryContext = {
+      channel: "reef",
+      accountId: "default",
+      to: "reef:peer-a",
+    } as const;
+    await upsertSessionEntry(
+      { agentId: "finance", sessionKey: "agent:finance:main", storePath: sharedStorePath },
+      {
+        sessionId: "finance-session",
+        updatedAt: 100,
+        chatType: "direct",
+        deliveryContext,
+      },
+    );
+    const identity = buildConversationIdentity({
+      channel: "reef",
+      accountId: "default",
+      kind: "direct",
+      peerId: "reef:peer-a",
+      deliveryTarget: "reef:peer-a",
+    });
+    expect(identity).toBeDefined();
+    registerConversationAddresses(
+      { agentId: "support", storePath: sharedStorePath },
+      [identity!],
+      200,
+    );
+
+    expect(
+      listConversations({ agentId: "support", storePath: sharedStorePath }, { channel: "reef" }),
+    ).toEqual([
+      expect.objectContaining({
+        conversationRef: identity?.conversationRef,
+        target: "reef:peer-a",
+      }),
+    ]);
+    expect(
+      listConversations({ agentId: "support", storePath: sharedStorePath }, { channel: "reef" })[0],
+    ).not.toMatchObject({
+      observedFromSession: true,
+      sessionId: expect.any(String),
+      sessionKey: expect.any(String),
+    });
   });
 
   it("orders fresh directory addresses with session-backed conversation activity", async () => {

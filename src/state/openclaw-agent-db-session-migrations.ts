@@ -127,6 +127,7 @@ export function backfillSessionConversations(db: DatabaseSync): void {
         session_id TEXT NOT NULL,
         conversation_id TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'primary' CHECK (role IN ('primary', 'participant', 'related')),
+        route_context_json TEXT,
         first_seen_at INTEGER NOT NULL,
         last_seen_at INTEGER NOT NULL,
         PRIMARY KEY (session_id, conversation_id, role),
@@ -250,6 +251,14 @@ export function backfillSessionConversations(db: DatabaseSync): void {
     if (role === "primary") {
       updatePrimary.run(conversation.conversationRef, sessionId);
     }
+  }
+}
+
+/** Adds exact per-conversation routing evidence without advancing the schema version. */
+export function ensureSessionConversationRouteContextColumn(db: DatabaseSync): void {
+  const columns = readSqliteTableColumns(db, "session_conversations");
+  if (columns && !columns.has("route_context_json")) {
+    db.exec("ALTER TABLE session_conversations ADD COLUMN route_context_json TEXT");
   }
 }
 

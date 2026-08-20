@@ -1,3 +1,4 @@
+import { safeParseJsonRecord } from "@openclaw/normalization-core/json-coercion";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
 import { executeSqliteQuerySync } from "../../infra/kysely-sync.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
@@ -69,6 +70,11 @@ function normalizeConversationRef(value: string): string {
   return normalized;
 }
 
+type MappedConversationRow = {
+  record: ConversationRecord;
+  ownedAssociation: boolean;
+};
+
 function mapConversationRow(
   row: {
     account_id: string;
@@ -87,13 +93,14 @@ function mapConversationRow(
     parent_conversation_id: string | null;
     peer_id: string;
     role: string | null;
+    route_context_json: string | null;
     current_session_id: string | null;
     current_entry_json: string | null;
     current_session_key: string | null;
     thread_id: string | null;
   },
   agentId: string,
-): ConversationRecord | null {
+): MappedConversationRow | null {
   if (row.kind !== "direct" && row.kind !== "group" && row.kind !== "channel") {
     return null;
   }
@@ -104,52 +111,64 @@ function mapConversationRow(
   const associatedAgentId = row.associated_session_key
     ? parseAgentSessionKey(row.associated_session_key)?.agentId
     : undefined;
-  if (
-    row.associated_session_key &&
-    (!associatedAgentId || normalizeAgentId(associatedAgentId) !== normalizeAgentId(agentId))
-  ) {
-    return null;
-  }
-  const currentEntry = row.current_entry_json
-    ? parseSessionEntryJson({ entry_json: row.current_entry_json })
-    : null;
-  const hasCurrentBinding = currentEntry?.sessionId === row.current_session_id;
-  const routeContext = parseConversationRouteContext(
-    hasCurrentBinding && currentEntry
-      ? Object.getOwnPropertyDescriptor(currentEntry, "conversationRouteContext")?.value
-      : undefined,
+  const ownedAssociation = Boolean(
+    row.associated_session_key === "global" ||
+    (associatedAgentId && normalizeAgentId(associatedAgentId) === normalizeAgentId(agentId)),
   );
+  const currentEntry =
+    ownedAssociation && row.current_entry_json
+      ? parseSessionEntryJson({ entry_json: row.current_entry_json })
+      : null;
+  const hasCurrentBinding = currentEntry?.sessionId === row.current_session_id;
+  const routeContext = ownedAssociation
+    ? parseConversationRouteContext(
+        row.route_context_json ? safeParseJsonRecord(row.route_context_json) : undefined,
+      )
+    : undefined;
   return {
-    conversationRef: row.conversation_id,
-    channel: row.channel,
-    accountId: row.account_id,
-    kind: row.kind,
-    peerId: row.peer_id,
-    target: row.delivery_target,
-    ...(row.parent_conversation_id ? { parentConversationRef: row.parent_conversation_id } : {}),
-    ...(row.thread_id ? { threadId: row.thread_id } : {}),
-    ...(row.native_channel_id ? { nativeChannelId: row.native_channel_id } : {}),
-    ...(row.native_direct_user_id ? { nativeDirectUserId: row.native_direct_user_id } : {}),
-    ...(row.label ? { label: row.label } : {}),
-    // Only the current session_nodes row can bind an address. The joined
-    // window row may be historical after reset, rebind, or deletion.
-    ...(role && hasCurrentBinding && row.current_session_id && row.current_session_key
-      ? {
-          sessionId: row.current_session_id,
-          sessionKey: row.current_session_key,
-          role,
-        }
-      : {}),
-    ...(role ? { observedFromSession: true as const } : {}),
-    ...(routeContext ? { routeContext } : {}),
-    firstSeenAt: row.first_seen_at ?? row.conversation_created_at,
-    lastSeenAt: row.last_seen_at ?? row.conversation_updated_at,
+    ownedAssociation,
+    record: {
+      conversationRef: row.conversation_id,
+      channel: row.channel,
+      accountId: row.account_id,
+      kind: row.kind,
+      peerId: row.peer_id,
+      target: row.delivery_target,
+      ...(row.parent_conversation_id ? { parentConversationRef: row.parent_conversation_id } : {}),
+      ...(row.thread_id ? { threadId: row.thread_id } : {}),
+      ...(row.native_channel_id ? { nativeChannelId: row.native_channel_id } : {}),
+      ...(row.native_direct_user_id ? { nativeDirectUserId: row.native_direct_user_id } : {}),
+      ...(row.label ? { label: row.label } : {}),
+      // Only the current session_nodes row can bind an address. The joined
+      // window row may be historical after reset, rebind, or deletion.
+      ...(ownedAssociation &&
+      role &&
+      hasCurrentBinding &&
+      row.current_session_id &&
+      row.current_session_key
+        ? {
+            sessionId: row.current_session_id,
+            sessionKey: row.current_session_key,
+            role,
+          }
+        : {}),
+      ...(ownedAssociation && role ? { observedFromSession: true as const } : {}),
+      ...(routeContext ? { routeContext } : {}),
+      firstSeenAt:
+        ownedAssociation && row.first_seen_at !== null
+          ? row.first_seen_at
+          : row.conversation_created_at,
+      lastSeenAt:
+        ownedAssociation && row.last_seen_at !== null
+          ? row.last_seen_at
+          : row.conversation_updated_at,
+    },
   };
 }
 
 function selectConversationRows(
   scope: ConversationRegistryScope,
-  options: { channel?: string; conversationRef?: string; limit?: number } = {},
+  options: { channel?: string; conversationRef?: string; limit?: number; offset?: number } = {},
 ): ConversationRecord[] {
   const resolved = resolveSqliteReadScope({
     agentId: scope.agentId,
@@ -158,7 +177,35 @@ function selectConversationRows(
   });
   const database = openOpenClawAgentDatabase(toDatabaseOptions(resolved));
   const db = getSessionKysely(database.db);
-  let query = db
+  let pageQuery = db
+    .selectFrom("conversations as c")
+    .select("c.conversation_id")
+    .orderBy("c.updated_at", "desc")
+    .orderBy("c.conversation_id", "asc");
+  const channel = normalizeOptionalLowercaseString(options.channel);
+  if (channel) {
+    pageQuery = pageQuery.where("c.channel", "=", channel);
+  }
+  if (options.conversationRef) {
+    pageQuery = pageQuery.where(
+      "c.conversation_id",
+      "=",
+      normalizeConversationRef(options.conversationRef),
+    );
+  }
+  if (options.limit !== undefined) {
+    pageQuery = pageQuery.limit(Math.max(0, Math.trunc(options.limit)));
+  }
+  if (options.offset !== undefined) {
+    pageQuery = pageQuery.offset(Math.max(0, Math.trunc(options.offset)));
+  }
+  const conversationIds = executeSqliteQuerySync(database.db, pageQuery).rows.map(
+    (row) => row.conversation_id,
+  );
+  if (conversationIds.length === 0) {
+    return [];
+  }
+  const query = db
     .selectFrom("conversations as c")
     .leftJoin("session_conversations as sc", "sc.conversation_id", "c.conversation_id")
     .leftJoin("session_windows as s", "s.session_id", "sc.session_id")
@@ -180,54 +227,59 @@ function selectConversationRows(
       "c.created_at as conversation_created_at",
       "c.updated_at as conversation_updated_at",
       "sc.role",
+      "sc.route_context_json",
       "sc.first_seen_at",
       "sc.last_seen_at",
       "s.session_key as associated_session_key",
       "sn.current_session_id as current_session_id",
       "sn.entry_json as current_entry_json",
       "sn.session_key as current_session_key",
-    ]);
-  const channel = normalizeOptionalLowercaseString(options.channel);
-  if (channel) {
-    query = query.where("c.channel", "=", channel);
-  }
-  if (options.conversationRef) {
-    query = query.where(
-      "c.conversation_id",
-      "=",
-      normalizeConversationRef(options.conversationRef),
-    );
-  }
+    ])
+    .where("c.conversation_id", "in", conversationIds);
   const rows = executeSqliteQuerySync(
     database.db,
     query
-      .orderBy((eb) => eb.fn.coalesce("sc.last_seen_at", "c.updated_at"), "desc")
+      .orderBy("c.updated_at", "desc")
+      .orderBy("c.conversation_id", "asc")
+      .orderBy("sc.last_seen_at", "desc")
       .orderBy("sn.updated_at", "desc"),
   ).rows;
-  const unique = new Map<string, ConversationRecord>();
+  const unique = new Map<string, MappedConversationRow>();
   for (const row of rows) {
     const mapped = mapConversationRow(row, scope.agentId);
     if (!mapped) {
       continue;
     }
-    const existing = unique.get(mapped.conversationRef);
+    const existing = unique.get(mapped.record.conversationRef);
     if (!existing) {
-      unique.set(mapped.conversationRef, mapped);
+      unique.set(mapped.record.conversationRef, mapped);
       continue;
     }
-    if (!existing.sessionId && mapped.sessionId && mapped.sessionKey && mapped.role) {
+    if (!existing.ownedAssociation && mapped.ownedAssociation) {
+      unique.set(mapped.record.conversationRef, mapped);
+      continue;
+    }
+    if (
+      existing.ownedAssociation === mapped.ownedAssociation &&
+      !existing.record.sessionId &&
+      mapped.record.sessionId &&
+      mapped.record.sessionKey &&
+      mapped.record.role
+    ) {
       // Keep the newest address activity while carrying forward the live binding
       // when a newer historical association has no current session entry.
-      unique.set(mapped.conversationRef, {
+      unique.set(mapped.record.conversationRef, {
         ...existing,
-        sessionId: mapped.sessionId,
-        sessionKey: mapped.sessionKey,
-        role: mapped.role,
+        record: {
+          ...existing.record,
+          sessionId: mapped.record.sessionId,
+          sessionKey: mapped.record.sessionKey,
+          role: mapped.record.role,
+        },
       });
     }
   }
-  const values = [...unique.values()];
-  return options.limit === undefined ? values : values.slice(0, options.limit);
+  return [...unique.values()].map((entry) => entry.record);
 }
 
 /** Catalogs routable addresses without creating model-context sessions. */
@@ -253,7 +305,7 @@ export function registerConversationAddresses(
 /** Lists stable external addresses for one agent, newest activity first. */
 export function listConversations(
   scope: ConversationRegistryScope,
-  options: { channel?: string; limit?: number } = {},
+  options: { channel?: string; limit?: number; offset?: number } = {},
 ): ConversationRecord[] {
   return selectConversationRows(scope, options);
 }

@@ -42,6 +42,7 @@ import {
 } from "./openclaw-agent-db-schema-helpers.js";
 import {
   backfillSessionConversations,
+  ensureSessionConversationRouteContextColumn,
   ensureSessionProjectColumn,
   ensureSessionEntryValidityProjection,
   migrateConversationDeliveryTargetColumn,
@@ -628,6 +629,7 @@ function ensureAgentSchema(
       }
       migrateRetiredAgentStateLeaseSchema(db, pathname, targetVersion);
       if (previousVersion === targetVersion) {
+        ensureSessionConversationRouteContextColumn(db);
         ensureSessionProjectColumn(db);
         ensureSessionEntryValidityProjection(db);
         ensureSessionKeyContractSchemaInTransaction(db);
@@ -663,6 +665,7 @@ function ensureAgentSchema(
       }
       backfillSessionEntryProvenance(db, previousVersion);
       migrateSessionNodesAndWindows(db, previousVersion);
+      ensureSessionConversationRouteContextColumn(db);
       ensureSessionProjectColumn(db);
       ensureSessionEntryValidityProjection(db);
       db.exec(OPENCLAW_AGENT_SCHEMA_SQL);

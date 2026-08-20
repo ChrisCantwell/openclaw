@@ -3,6 +3,7 @@ import { requireNodeSqlite } from "../infra/node-sqlite.js";
 import { buildConversationRef } from "../routing/conversation-ref.js";
 import {
   backfillSessionConversations,
+  ensureSessionConversationRouteContextColumn,
   migrateConversationDeliveryTargetColumn,
 } from "./openclaw-agent-db-session-migrations.js";
 
@@ -13,6 +14,38 @@ describe("agent DB conversation migration", () => {
     for (const database of databases.splice(0)) {
       database.close();
     }
+  });
+
+  it("adds nullable route context without advancing the schema version", () => {
+    const sqlite = requireNodeSqlite();
+    const database = new sqlite.DatabaseSync(":memory:");
+    databases.push(database);
+    database.exec(`
+      PRAGMA user_version = 17;
+      CREATE TABLE session_conversations (
+        session_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        first_seen_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, conversation_id, role)
+      ) STRICT;
+      INSERT INTO session_conversations (
+        session_id, conversation_id, role, first_seen_at, last_seen_at
+      ) VALUES ('session-a', 'conversation-a', 'primary', 1, 1);
+    `);
+
+    ensureSessionConversationRouteContextColumn(database);
+    ensureSessionConversationRouteContextColumn(database);
+
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 17 });
+    expect(
+      database
+        .prepare(
+          "SELECT route_context_json FROM session_conversations WHERE session_id = 'session-a'",
+        )
+        .get(),
+    ).toEqual({ route_context_json: null });
   });
 
   it("backfills direct addresses and keeps shared-main peers as participants", () => {

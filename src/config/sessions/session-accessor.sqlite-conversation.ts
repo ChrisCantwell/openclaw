@@ -4,31 +4,38 @@ import {
   conversationIdentityFromSessionEntry,
   type ConversationIdentity,
 } from "./conversation-identity.js";
+import {
+  parseConversationRouteContext,
+  type ConversationRouteContext,
+} from "./conversation-route-context.js";
 import { getSessionKysely } from "./session-accessor.sqlite-scope.js";
-import type { SessionEntry } from "./types.js";
+import type { InternalSessionEntry } from "./types.js";
 
 type SessionConversationRole = "participant" | "primary" | "related";
 
 type PreparedSessionConversation = {
   identity: ConversationIdentity;
   role: SessionConversationRole;
+  routeContext?: ConversationRouteContext;
 };
 
 /** Shared-main DMs multiplex peers through one context; every other routed session has one primary. */
 export function prepareSessionConversation(params: {
-  entry: SessionEntry;
+  entry: InternalSessionEntry;
   sessionScope: string;
 }): PreparedSessionConversation | null {
   const identity = conversationIdentityFromSessionEntry(params.entry);
   if (!identity) {
     return null;
   }
+  const routeContext = parseConversationRouteContext(params.entry.conversationRouteContext);
   return {
     identity,
     role:
       params.sessionScope === "shared-main" && identity.kind === "direct"
         ? "participant"
         : "primary",
+    ...(routeContext ? { routeContext } : {}),
   };
 }
 
@@ -92,7 +99,7 @@ export function linkSessionConversation(params: {
       database.db,
       db
         .selectFrom("session_conversations")
-        .select(["conversation_id", "first_seen_at"])
+        .select(["conversation_id", "first_seen_at", "route_context_json"])
         .where("session_id", "=", sessionId)
         .where("role", "=", "primary")
         .where("conversation_id", "!=", conversation.identity.conversationRef),
@@ -107,14 +114,16 @@ export function linkSessionConversation(params: {
               session_id: sessionId,
               conversation_id: row.conversation_id,
               role: "related",
+              route_context_json: row.route_context_json,
               first_seen_at: row.first_seen_at,
               last_seen_at: updatedAt,
             })),
           )
           .onConflict((conflict) =>
-            conflict.columns(["session_id", "conversation_id", "role"]).doUpdateSet({
+            conflict.columns(["session_id", "conversation_id", "role"]).doUpdateSet((eb) => ({
+              route_context_json: eb.ref("excluded.route_context_json"),
               last_seen_at: updatedAt,
-            }),
+            })),
           ),
       );
       executeSqliteQuerySync(
@@ -146,11 +155,17 @@ export function linkSessionConversation(params: {
         session_id: sessionId,
         conversation_id: conversation.identity.conversationRef,
         role: conversation.role,
+        route_context_json: conversation.routeContext
+          ? JSON.stringify(conversation.routeContext)
+          : null,
         first_seen_at: updatedAt,
         last_seen_at: updatedAt,
       })
       .onConflict((conflict) =>
         conflict.columns(["session_id", "conversation_id", "role"]).doUpdateSet({
+          route_context_json: conversation.routeContext
+            ? JSON.stringify(conversation.routeContext)
+            : null,
           last_seen_at: updatedAt,
         }),
       ),

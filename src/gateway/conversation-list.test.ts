@@ -4,6 +4,62 @@ import type { ConversationRecord } from "../config/sessions/conversation-registr
 import { runGatewayConversationList } from "./conversation-list.js";
 
 describe("runGatewayConversationList", () => {
+  it("reads bounded pages until the requested number of eligible conversations is found", async () => {
+    const foreign: ConversationRecord = {
+      conversationRef: "conv_00000000000000000000000000000001",
+      channel: "reef",
+      accountId: "finance",
+      kind: "channel",
+      target: "channel:finance",
+      peerId: "finance",
+      firstSeenAt: 100,
+      lastSeenAt: 100,
+    };
+    const owned: ConversationRecord = {
+      conversationRef: "conv_00000000000000000000000000000002",
+      channel: "reef",
+      accountId: "support",
+      kind: "channel",
+      target: "channel:support",
+      peerId: "support",
+      firstSeenAt: 100,
+      lastSeenAt: 100,
+    };
+    const listConversations = vi.fn((_scope, options) =>
+      options?.offset === 1 ? [owned] : [foreign],
+    );
+
+    const result = await runGatewayConversationList(
+      {
+        config: {
+          bindings: [
+            { agentId: "finance", match: { channel: "reef", accountId: "finance" } },
+            { agentId: "support", match: { channel: "reef", accountId: "support" } },
+          ],
+        },
+        agentId: "support",
+        limit: 1,
+      },
+      {
+        listConversations,
+        registerConversationAddresses: vi.fn(),
+        resolveOutboundChannelPlugin: vi.fn(),
+        resolveOutboundSessionRoute: vi.fn(),
+      } as never,
+    );
+
+    expect(result.conversations).toEqual([
+      expect.objectContaining({ conversationRef: owned.conversationRef }),
+    ]);
+    expect(listConversations).toHaveBeenNthCalledWith(1, expect.anything(), {
+      limit: 1,
+      offset: 0,
+    });
+    expect(listConversations).toHaveBeenNthCalledWith(2, expect.anything(), {
+      limit: 1,
+      offset: 1,
+    });
+  });
   it("discovers a trusted directory peer without creating a session", async () => {
     let discovered: ConversationIdentity[] = [];
     const listPeers = vi.fn(async () => [
@@ -55,7 +111,10 @@ describe("runGatewayConversationList", () => {
     expect(listPeers).toHaveBeenCalledWith(
       expect.objectContaining({ accountId: "default", query: "@molty", limit: 50 }),
     );
-    expect(deps.listConversations).toHaveBeenCalledWith({ agentId: "main" }, { channel: "reef" });
+    expect(deps.listConversations).toHaveBeenCalledWith(
+      { agentId: "main" },
+      { channel: "reef", limit: 50, offset: 0 },
+    );
     expect(resolveOutboundSessionRoute).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: "reef",
@@ -205,7 +264,11 @@ describe("runGatewayConversationList", () => {
     ]);
     expect(deps.listConversations).toHaveBeenCalledWith(
       { agentId: "personal" },
-      input.channel ? { channel: "reef" } : {},
+      {
+        ...(input.channel ? { channel: "reef" } : {}),
+        limit: 1,
+        offset: 0,
+      },
     );
   });
 

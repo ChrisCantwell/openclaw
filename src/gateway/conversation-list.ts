@@ -248,25 +248,37 @@ export async function runGatewayConversationList(
         deps,
       })
     : undefined;
-  const conversations = deps.listConversations(
-    scope,
-    discovery ? { channel: discovery.channel } : {},
-  );
-  const eligible = conversations.filter((conversation) =>
-    isConversationRouteEligibleForAgent({
-      config: params.config,
-      agentId: params.agentId,
-      conversation,
-    }),
-  );
-  const selected = query
-    ? eligible
-        .filter(
-          (entry) =>
-            discovery?.discoveredConversationRefs.has(entry.conversationRef) === true ||
-            matchesConversationQuery(entry, query),
-        )
-        .slice(0, params.limit)
-    : eligible.slice(0, params.limit);
+  const selected: ConversationRecord[] = [];
+  const pageSize = Math.max(1, params.limit);
+  let offset = 0;
+  while (selected.length < params.limit) {
+    const conversations = deps.listConversations(scope, {
+      ...(discovery ? { channel: discovery.channel } : {}),
+      limit: pageSize,
+      offset,
+    });
+    for (const conversation of conversations) {
+      if (
+        isConversationRouteEligibleForAgent({
+          config: params.config,
+          agentId: params.agentId,
+          conversation,
+        }) &&
+        (!query ||
+          discovery?.discoveredConversationRefs.has(conversation.conversationRef) === true ||
+          matchesConversationQuery(conversation, query))
+      ) {
+        selected.push(conversation);
+        if (selected.length === params.limit) {
+          break;
+        }
+      }
+    }
+    if (conversations.length < pageSize || selected.length === params.limit) {
+      break;
+    }
+    offset += conversations.length;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
   return { conversations: selected.map(presentConversation) };
 }

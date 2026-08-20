@@ -219,6 +219,7 @@ CREATE TABLE IF NOT EXISTS session_conversations (
   session_id TEXT NOT NULL,
   conversation_id TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'primary' CHECK (role IN ('primary', 'participant', 'related')),
+  route_context_json TEXT,
   first_seen_at INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL,
   PRIMARY KEY (session_id, conversation_id, role),
