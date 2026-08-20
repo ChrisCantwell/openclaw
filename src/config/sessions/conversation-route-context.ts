@@ -4,13 +4,9 @@ import {
   normalizeOptionalString,
 } from "@openclaw/normalization-core/string-coerce";
 import type { MsgContext } from "../../auto-reply/templating.js";
+import type { ConversationRouteContext } from "./conversation-route-context.types.js";
 
-export type ConversationRouteContext = {
-  guildId?: string;
-  teamId?: string;
-  parentPeerId?: string;
-  memberRoleIds?: string[];
-};
+export type { ConversationRouteContext } from "./conversation-route-context.types.js";
 
 function normalizeRoleIds(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {

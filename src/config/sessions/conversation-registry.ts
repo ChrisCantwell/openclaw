@@ -1,6 +1,6 @@
-import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
 import { executeSqliteQuerySync } from "../../infra/kysely-sync.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { openOpenClawAgentDatabase } from "../../state/openclaw-agent-db.js";
 import type { OpenClawConfig } from "../types.openclaw.js";
 import type { ConversationIdentity, ConversationKind } from "./conversation-identity.js";
@@ -69,28 +69,31 @@ function normalizeConversationRef(value: string): string {
   return normalized;
 }
 
-function mapConversationRow(row: {
-  account_id: string;
-  channel: string;
-  conversation_id: string;
-  conversation_created_at: number;
-  conversation_updated_at: number;
-  first_seen_at: number | null;
-  kind: string;
-  metadata_json: string | null;
-  label: string | null;
-  last_seen_at: number | null;
-  delivery_target: string;
-  native_channel_id: string | null;
-  native_direct_user_id: string | null;
-  parent_conversation_id: string | null;
-  peer_id: string;
-  role: string | null;
-  current_session_id: string | null;
-  current_entry_json: string | null;
-  current_session_key: string | null;
-  thread_id: string | null;
-}): ConversationRecord | null {
+function mapConversationRow(
+  row: {
+    account_id: string;
+    channel: string;
+    conversation_id: string;
+    conversation_created_at: number;
+    conversation_updated_at: number;
+    first_seen_at: number | null;
+    kind: string;
+    associated_session_key: string | null;
+    label: string | null;
+    last_seen_at: number | null;
+    delivery_target: string;
+    native_channel_id: string | null;
+    native_direct_user_id: string | null;
+    parent_conversation_id: string | null;
+    peer_id: string;
+    role: string | null;
+    current_session_id: string | null;
+    current_entry_json: string | null;
+    current_session_key: string | null;
+    thread_id: string | null;
+  },
+  agentId: string,
+): ConversationRecord | null {
   if (row.kind !== "direct" && row.kind !== "group" && row.kind !== "channel") {
     return null;
   }
@@ -98,21 +101,24 @@ function mapConversationRow(row: {
     row.role === "primary" || row.role === "participant" || row.role === "related"
       ? row.role
       : undefined;
+  const associatedAgentId = row.associated_session_key
+    ? parseAgentSessionKey(row.associated_session_key)?.agentId
+    : undefined;
+  if (
+    row.associated_session_key &&
+    (!associatedAgentId || normalizeAgentId(associatedAgentId) !== normalizeAgentId(agentId))
+  ) {
+    return null;
+  }
   const currentEntry = row.current_entry_json
     ? parseSessionEntryJson({ entry_json: row.current_entry_json })
     : null;
   const hasCurrentBinding = currentEntry?.sessionId === row.current_session_id;
-  let routeContext: ConversationRouteContext | undefined;
-  if (row.metadata_json) {
-    try {
-      const metadata = JSON.parse(row.metadata_json) as unknown;
-      routeContext = isRecord(metadata)
-        ? parseConversationRouteContext(metadata.routeContext)
-        : undefined;
-    } catch {
-      routeContext = undefined;
-    }
-  }
+  const routeContext = parseConversationRouteContext(
+    hasCurrentBinding && currentEntry
+      ? Object.getOwnPropertyDescriptor(currentEntry, "conversationRouteContext")?.value
+      : undefined,
+  );
   return {
     conversationRef: row.conversation_id,
     channel: row.channel,
@@ -171,12 +177,12 @@ function selectConversationRows(
       "c.native_channel_id",
       "c.native_direct_user_id",
       "c.label",
-      "c.metadata_json",
       "c.created_at as conversation_created_at",
       "c.updated_at as conversation_updated_at",
       "sc.role",
       "sc.first_seen_at",
       "sc.last_seen_at",
+      "s.session_key as associated_session_key",
       "sn.current_session_id as current_session_id",
       "sn.entry_json as current_entry_json",
       "sn.session_key as current_session_key",
@@ -200,7 +206,7 @@ function selectConversationRows(
   ).rows;
   const unique = new Map<string, ConversationRecord>();
   for (const row of rows) {
-    const mapped = mapConversationRow(row);
+    const mapped = mapConversationRow(row, scope.agentId);
     if (!mapped) {
       continue;
     }

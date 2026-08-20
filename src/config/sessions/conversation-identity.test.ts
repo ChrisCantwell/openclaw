@@ -300,8 +300,5 @@ describe("conversation identity", () => {
     expect(live?.deliveryTarget).toBe("channel:ops-room");
     expect(persisted?.deliveryTarget).toBe("channel:ops-room");
     expect(live?.parentConversationRef).toBeUndefined();
-    expect(live?.metadata).toEqual({
-      routeContext: { parentPeerId: "unpersisted-parent-id" },
-    });
   });
 });

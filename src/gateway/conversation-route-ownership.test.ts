@@ -128,4 +128,37 @@ describe("isConversationRouteEligibleForAgent", () => {
       }),
     ).toBe(false);
   });
+
+  it("does not let a context-free fallback share an exact contextual route", () => {
+    const config = {
+      agents: { entries: { main: {}, finance: {} } },
+      bindings: [
+        {
+          type: "route" as const,
+          agentId: "finance",
+          match: { channel: "discord", accountId: "default", guildId: "guild-a" },
+        },
+        {
+          type: "route" as const,
+          agentId: "main",
+          match: { channel: "discord", accountId: "default" },
+        },
+      ],
+    };
+    const conversation = {
+      channel: "discord",
+      accountId: "default",
+      kind: "channel" as const,
+      peerId: "ops-room",
+      observedFromSession: true as const,
+      routeContext: { guildId: "guild-a" },
+    };
+
+    expect(isConversationRouteEligibleForAgent({ config, agentId: "finance", conversation })).toBe(
+      true,
+    );
+    expect(isConversationRouteEligibleForAgent({ config, agentId: "main", conversation })).toBe(
+      false,
+    );
+  });
 });

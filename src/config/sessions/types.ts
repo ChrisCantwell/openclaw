@@ -20,7 +20,7 @@ import type { ChannelRouteRef } from "../../plugin-sdk/channel-route.js";
 import type { SessionBoardFace } from "../../shared/session-types.js";
 import type { DeliveryContext } from "../../utils/delivery-context.types.js";
 import type { TtsAutoMode } from "../types.tts.js";
-import type { ConversationRouteContext } from "./conversation-route-context.js";
+import type { ConversationRouteContext } from "./conversation-route-context.types.js";
 import type { MainRestartRecoveryState } from "./main-session-recovery.types.js";
 import type {
   PendingDeliveryNoticeState,

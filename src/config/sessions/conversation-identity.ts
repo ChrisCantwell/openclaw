@@ -14,10 +14,6 @@ import {
   sessionDeliveryOrigin,
 } from "../../utils/delivery-context.shared.js";
 import type { DeliveryContext } from "../../utils/delivery-context.types.js";
-import {
-  conversationRouteContextFromMsgContext,
-  parseConversationRouteContext,
-} from "./conversation-route-context.js";
 import { resolveGroupSessionKey } from "./group.js";
 import { deriveSessionOrigin } from "./metadata.js";
 import type { GroupKeyResolution, SessionEntry } from "./types.js";
@@ -178,9 +174,6 @@ export function conversationIdentityFromSessionEntry(
         kind,
       })
     : undefined;
-  const routeContext = parseConversationRouteContext(
-    Object.getOwnPropertyDescriptor(entry, "conversationRouteContext")?.value,
-  );
   return buildConversationIdentity({
     channel,
     accountId: routeOwnsTarget ? deliveryContext?.accountId : origin?.accountId,
@@ -192,7 +185,6 @@ export function conversationIdentityFromSessionEntry(
     nativeChannelId: origin?.nativeChannelId,
     nativeDirectUserId: origin?.nativeDirectUserId,
     label: entry.displayName ?? entry.label,
-    metadata: routeContext ? { routeContext } : undefined,
   });
 }
 
@@ -231,7 +223,6 @@ export function conversationIdentityFromMsgContext(params: {
       normalizeText(route?.provider) ??
       normalizeText(params.ctx.OriginatingChannel) ??
       normalizeText(params.ctx.Provider));
-  const routeContext = conversationRouteContextFromMsgContext(params.ctx);
   return buildConversationIdentity({
     channel,
     accountId: useDirectIngressTarget
@@ -246,6 +237,5 @@ export function conversationIdentityFromMsgContext(params: {
     nativeChannelId: params.ctx.NativeChannelId ?? route?.nativeChannelId,
     nativeDirectUserId: params.ctx.NativeDirectUserId ?? route?.nativeDirectUserId,
     label: normalizeText(resolveConversationLabel(params.ctx)) ?? route?.label,
-    metadata: routeContext ? { routeContext } : undefined,
   });
 }

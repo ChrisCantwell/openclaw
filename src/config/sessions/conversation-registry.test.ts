@@ -112,50 +112,39 @@ describe("conversation registry", () => {
     );
   });
 
-  it("retains exact session route context across directory refreshes", async () => {
-    await upsertSessionEntry(
-      { agentId: "main", sessionKey: "agent:main:discord:channel:ops", storePath },
-      {
-        sessionId: "ops-session",
-        updatedAt: 100,
-        chatType: "channel",
-        deliveryContext: { channel: "discord", accountId: "default", to: "channel:ops" },
-        conversationRouteContext: { guildId: "guild-a", memberRoleIds: ["support"] },
-      },
-    );
-    const [observed] = listConversations({ agentId: "main", storePath }, { channel: "discord" });
-    expect(observed?.routeContext).toEqual({
-      guildId: "guild-a",
-      memberRoleIds: ["support"],
-    });
+  it("keeps route context scoped to each agent in a shared store", async () => {
+    for (const [agentId, role] of [
+      ["finance", "finance"],
+      ["support", "support"],
+    ] as const) {
+      await upsertSessionEntry(
+        {
+          agentId,
+          sessionKey: `agent:${agentId}:discord:channel:ops`,
+          storePath,
+        },
+        {
+          sessionId: `${agentId}-ops-session`,
+          updatedAt: 100,
+          chatType: "channel",
+          deliveryContext: { channel: "discord", accountId: "default", to: "channel:ops" },
+          conversationRouteContext: { guildId: "guild-a", memberRoleIds: [role] },
+        },
+      );
+    }
 
-    const directoryIdentity = buildConversationIdentity({
-      channel: "discord",
-      accountId: "default",
-      kind: "channel",
-      peerId: "channel:ops",
-      deliveryTarget: "channel:ops",
-      label: "#ops",
-    });
-    registerConversationAddresses({ agentId: "main", storePath }, [directoryIdentity!], 200);
-
-    expect(
-      resolveConversation({ agentId: "main", storePath }, observed!.conversationRef)?.routeContext,
-    ).toEqual({ guildId: "guild-a", memberRoleIds: ["support"] });
-
-    await upsertSessionEntry(
-      { agentId: "main", sessionKey: "agent:main:discord:channel:ops", storePath },
-      {
-        sessionId: "ops-session",
-        updatedAt: 300,
-        chatType: "channel",
-        deliveryContext: { channel: "discord", accountId: "default", to: "channel:ops" },
-        conversationRouteContext: { guildId: "guild-b" },
-      },
-    );
-    expect(
-      resolveConversation({ agentId: "main", storePath }, observed!.conversationRef)?.routeContext,
-    ).toEqual({ guildId: "guild-b" });
+    expect(listConversations({ agentId: "finance", storePath }, { channel: "discord" })).toEqual([
+      expect.objectContaining({
+        sessionKey: "agent:finance:discord:channel:ops",
+        routeContext: { guildId: "guild-a", memberRoleIds: ["finance"] },
+      }),
+    ]);
+    expect(listConversations({ agentId: "support", storePath }, { channel: "discord" })).toEqual([
+      expect.objectContaining({
+        sessionKey: "agent:support:discord:channel:ops",
+        routeContext: { guildId: "guild-a", memberRoleIds: ["support"] },
+      }),
+    ]);
   });
 
   it("orders fresh directory addresses with session-backed conversation activity", async () => {
