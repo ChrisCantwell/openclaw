@@ -71,7 +71,7 @@ export function upsertConversationIdentity(
           native_channel_id: identity.nativeChannelId ?? null,
           native_direct_user_id: identity.nativeDirectUserId ?? null,
           label: identity.label ?? null,
-          metadata_json: identity.metadata ? JSON.stringify(identity.metadata) : null,
+          ...(identity.metadata ? { metadata_json: JSON.stringify(identity.metadata) } : {}),
           updated_at: updatedAt,
         }),
       ),

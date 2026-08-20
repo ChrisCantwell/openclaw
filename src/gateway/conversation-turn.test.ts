@@ -512,6 +512,50 @@ describe("runGatewayConversationTurn", () => {
     expect(deps.runMessageAction).not.toHaveBeenCalled();
   });
 
+  it("rejects a contextual turn after that exact route is reassigned", async () => {
+    const deps = createDeps();
+    deps.resolveConversation.mockReturnValue({
+      ...conversation,
+      channel: "discord",
+      kind: "channel",
+      peerId: "support-room",
+      target: "channel:support-room",
+      observedFromSession: true,
+      routeContext: { guildId: "guild-a" },
+    } as ConversationRecord);
+
+    await expect(
+      runGatewayConversationTurn(
+        {
+          config: {
+            agents: { entries: { main: {}, finance: {}, support: {} } },
+            bindings: [
+              {
+                type: "route",
+                agentId: "support",
+                match: { channel: "discord", accountId: "default", guildId: "guild-a" },
+              },
+              {
+                type: "route",
+                agentId: "finance",
+                match: { channel: "discord", accountId: "default", guildId: "guild-b" },
+              },
+            ],
+          },
+          agentId: "finance",
+          senderIsOwner: true,
+          turnId: "turn-reassigned-contextual-route",
+          conversationRef: conversation.conversationRef,
+          message: "hello",
+          timeoutMs: 1,
+        },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(ConversationInputError);
+    expect(deps.beginOperation).not.toHaveBeenCalled();
+    expect(deps.runMessageAction).not.toHaveBeenCalled();
+  });
+
   it("classifies a final rendered provider rejection as invalid input", async () => {
     const deps = createDeps();
     deps.runMessageAction = vi.fn(async () => {

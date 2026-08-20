@@ -212,7 +212,7 @@ describe("runGatewayConversationList", () => {
   it("keeps an observed contextual route but hides the same directory-only route", async () => {
     const contextual: ConversationRecord = {
       conversationRef: "conv_33333333333333333333333333333333",
-      channel: "reef",
+      channel: "discord",
       accountId: "default",
       kind: "channel" as const,
       peerId: "support-room",
@@ -234,7 +234,7 @@ describe("runGatewayConversationList", () => {
             type: "route" as const,
             agentId: "finance",
             match: {
-              channel: "reef",
+              channel: "discord",
               accountId: "default",
               guildId: "support-guild",
               roles: ["support"],
@@ -243,7 +243,7 @@ describe("runGatewayConversationList", () => {
           {
             type: "route" as const,
             agentId: "main",
-            match: { channel: "reef", accountId: "default" },
+            match: { channel: "discord", accountId: "default" },
           },
         ],
       },
@@ -254,10 +254,52 @@ describe("runGatewayConversationList", () => {
     await expect(runGatewayConversationList(params, deps as never)).resolves.toEqual({
       conversations: [],
     });
-    deps.listConversations.mockReturnValueOnce([{ ...contextual, observedFromSession: true }]);
+    deps.listConversations.mockReturnValueOnce([
+      {
+        ...contextual,
+        observedFromSession: true,
+        routeContext: { guildId: "support-guild", memberRoleIds: ["support"] },
+      },
+    ]);
     await expect(runGatewayConversationList(params, deps as never)).resolves.toEqual({
       conversations: [expect.objectContaining({ conversationRef: contextual.conversationRef })],
     });
+
+    deps.listConversations.mockReturnValueOnce([
+      {
+        ...contextual,
+        observedFromSession: true,
+        routeContext: { guildId: "support-guild", memberRoleIds: ["support"] },
+      },
+    ]);
+    await expect(
+      runGatewayConversationList(
+        {
+          ...params,
+          config: {
+            ...params.config,
+            agents: { entries: { main: {}, finance: {}, support: {} } },
+            bindings: [
+              {
+                type: "route",
+                agentId: "support",
+                match: {
+                  channel: "discord",
+                  accountId: "default",
+                  guildId: "support-guild",
+                },
+              },
+              {
+                type: "route",
+                agentId: "finance",
+                match: { channel: "discord", accountId: "default", guildId: "finance-guild" },
+              },
+            ],
+          },
+        },
+        deps as never,
+      ),
+    ).resolves.toEqual({ conversations: [] });
   });
 
   it("keeps route identity separate from its delivery address", async () => {

@@ -307,6 +307,7 @@ describe("runGatewayConversationSend", () => {
     const deps = createDeps();
     deps.resolveConversation.mockReturnValue({
       ...conversation,
+      channel: "discord",
       kind: "channel",
       peerId: "support-room",
       target: "channel:support-room",
@@ -314,6 +315,7 @@ describe("runGatewayConversationSend", () => {
       sessionKey: "agent:finance:reef:channel:support-room",
       role: "primary",
       observedFromSession: true,
+      routeContext: { guildId: "support-guild", memberRoleIds: ["support"] },
     } as never);
 
     await expect(
@@ -326,7 +328,7 @@ describe("runGatewayConversationSend", () => {
                 type: "route",
                 agentId: "finance",
                 match: {
-                  channel: "reef",
+                  channel: "discord",
                   accountId: "default",
                   guildId: "support-guild",
                   roles: ["support"],
@@ -335,7 +337,7 @@ describe("runGatewayConversationSend", () => {
               {
                 type: "route",
                 agentId: "main",
-                match: { channel: "reef", accountId: "default" },
+                match: { channel: "discord", accountId: "default" },
               },
             ],
           },
@@ -349,6 +351,49 @@ describe("runGatewayConversationSend", () => {
       ),
     ).resolves.toMatchObject({ status: "sent" });
     expect(deps.runMessageAction).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a contextual route after that exact route is reassigned", async () => {
+    const deps = createDeps();
+    deps.resolveConversation.mockReturnValue({
+      ...conversation,
+      channel: "discord",
+      kind: "channel",
+      peerId: "support-room",
+      target: "channel:support-room",
+      observedFromSession: true,
+      routeContext: { guildId: "guild-a" },
+    } as never);
+
+    await expect(
+      runGatewayConversationSend(
+        {
+          config: {
+            agents: { entries: { main: {}, finance: {}, support: {} } },
+            bindings: [
+              {
+                type: "route",
+                agentId: "support",
+                match: { channel: "discord", accountId: "default", guildId: "guild-a" },
+              },
+              {
+                type: "route",
+                agentId: "finance",
+                match: { channel: "discord", accountId: "default", guildId: "guild-b" },
+              },
+            ],
+          },
+          agentId: "finance",
+          senderIsOwner: true,
+          operationId: "send-reassigned-contextual-route",
+          conversationRef: conversation.conversationRef,
+          message: "hello",
+        },
+        deps,
+      ),
+    ).rejects.toBeInstanceOf(ConversationInputError);
+    expect(deps.beginOperation).not.toHaveBeenCalled();
+    expect(deps.runMessageAction).not.toHaveBeenCalled();
   });
 
   it("preserves durable operation conflicts for Gateway identity recovery", async () => {

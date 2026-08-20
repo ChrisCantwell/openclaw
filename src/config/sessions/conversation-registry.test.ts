@@ -23,9 +23,9 @@ import {
   resolveSqliteReadScope,
   toDatabaseOptions,
 } from "./session-accessor.sqlite-scope.js";
-import type { SessionEntry, SessionOrigin } from "./types.js";
+import type { InternalSessionEntry, SessionEntry, SessionOrigin } from "./types.js";
 
-type LegacyDeliveryFixture = Partial<SessionEntry> & {
+type LegacyDeliveryFixture = Partial<InternalSessionEntry> & {
   deliveryContext?: DeliveryContext;
   origin?: SessionOrigin;
 };
@@ -110,6 +110,52 @@ describe("conversation registry", () => {
     expect(resolveConversation({ agentId: "main", storePath }, identity!.conversationRef)).toEqual(
       conversation,
     );
+  });
+
+  it("retains exact session route context across directory refreshes", async () => {
+    await upsertSessionEntry(
+      { agentId: "main", sessionKey: "agent:main:discord:channel:ops", storePath },
+      {
+        sessionId: "ops-session",
+        updatedAt: 100,
+        chatType: "channel",
+        deliveryContext: { channel: "discord", accountId: "default", to: "channel:ops" },
+        conversationRouteContext: { guildId: "guild-a", memberRoleIds: ["support"] },
+      },
+    );
+    const [observed] = listConversations({ agentId: "main", storePath }, { channel: "discord" });
+    expect(observed?.routeContext).toEqual({
+      guildId: "guild-a",
+      memberRoleIds: ["support"],
+    });
+
+    const directoryIdentity = buildConversationIdentity({
+      channel: "discord",
+      accountId: "default",
+      kind: "channel",
+      peerId: "channel:ops",
+      deliveryTarget: "channel:ops",
+      label: "#ops",
+    });
+    registerConversationAddresses({ agentId: "main", storePath }, [directoryIdentity!], 200);
+
+    expect(
+      resolveConversation({ agentId: "main", storePath }, observed!.conversationRef)?.routeContext,
+    ).toEqual({ guildId: "guild-a", memberRoleIds: ["support"] });
+
+    await upsertSessionEntry(
+      { agentId: "main", sessionKey: "agent:main:discord:channel:ops", storePath },
+      {
+        sessionId: "ops-session",
+        updatedAt: 300,
+        chatType: "channel",
+        deliveryContext: { channel: "discord", accountId: "default", to: "channel:ops" },
+        conversationRouteContext: { guildId: "guild-b" },
+      },
+    );
+    expect(
+      resolveConversation({ agentId: "main", storePath }, observed!.conversationRef)?.routeContext,
+    ).toEqual({ guildId: "guild-b" });
   });
 
   it("orders fresh directory addresses with session-backed conversation activity", async () => {

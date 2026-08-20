@@ -1,8 +1,13 @@
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
 import { executeSqliteQuerySync } from "../../infra/kysely-sync.js";
 import { openOpenClawAgentDatabase } from "../../state/openclaw-agent-db.js";
 import type { OpenClawConfig } from "../types.openclaw.js";
 import type { ConversationIdentity, ConversationKind } from "./conversation-identity.js";
+import {
+  parseConversationRouteContext,
+  type ConversationRouteContext,
+} from "./conversation-route-context.js";
 import { resolveSessionStorePathCore } from "./paths.js";
 import { upsertConversationIdentity } from "./session-accessor.sqlite-conversation.js";
 import {
@@ -31,6 +36,8 @@ export type ConversationRecord = {
   role?: "participant" | "primary" | "related";
   /** True when this address has been linked to a session in this agent's store. */
   observedFromSession?: true;
+  /** Exact contextual facts from the inbound route that admitted this address. */
+  routeContext?: ConversationRouteContext;
   firstSeenAt: number;
   lastSeenAt: number;
 };
@@ -70,6 +77,7 @@ function mapConversationRow(row: {
   conversation_updated_at: number;
   first_seen_at: number | null;
   kind: string;
+  metadata_json: string | null;
   label: string | null;
   last_seen_at: number | null;
   delivery_target: string;
@@ -94,6 +102,17 @@ function mapConversationRow(row: {
     ? parseSessionEntryJson({ entry_json: row.current_entry_json })
     : null;
   const hasCurrentBinding = currentEntry?.sessionId === row.current_session_id;
+  let routeContext: ConversationRouteContext | undefined;
+  if (row.metadata_json) {
+    try {
+      const metadata = JSON.parse(row.metadata_json) as unknown;
+      routeContext = isRecord(metadata)
+        ? parseConversationRouteContext(metadata.routeContext)
+        : undefined;
+    } catch {
+      routeContext = undefined;
+    }
+  }
   return {
     conversationRef: row.conversation_id,
     channel: row.channel,
@@ -116,6 +135,7 @@ function mapConversationRow(row: {
         }
       : {}),
     ...(role ? { observedFromSession: true as const } : {}),
+    ...(routeContext ? { routeContext } : {}),
     firstSeenAt: row.first_seen_at ?? row.conversation_created_at,
     lastSeenAt: row.last_seen_at ?? row.conversation_updated_at,
   };
@@ -151,6 +171,7 @@ function selectConversationRows(
       "c.native_channel_id",
       "c.native_direct_user_id",
       "c.label",
+      "c.metadata_json",
       "c.created_at as conversation_created_at",
       "c.updated_at as conversation_updated_at",
       "sc.role",

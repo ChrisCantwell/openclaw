@@ -2,6 +2,7 @@ import type { InternalSessionEntry, SessionEntry } from "./types.js";
 
 export const SESSION_ENTRY_PRIVATE_CLEAR_PATCH = {
   activeWriterRunId: undefined,
+  conversationRouteContext: undefined,
   lifecycleRunId: undefined,
   mainRestartRecovery: undefined,
   sessionDiffBaselineCapture: undefined,
@@ -9,6 +10,7 @@ export const SESSION_ENTRY_PRIVATE_CLEAR_PATCH = {
 
 const PRIVATE_SESSION_ENTRY_KEYS = [
   "activeWriterRunId",
+  "conversationRouteContext",
   "lifecycleRunId",
   "mainRestartRecovery",
   "sessionDiffBaselineCapture",

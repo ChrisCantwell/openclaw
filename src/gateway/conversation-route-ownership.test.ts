@@ -13,19 +13,19 @@ describe("isConversationRouteEligibleForAgent", () => {
     {
       name: "guild and roles",
       match: {
-        channel: "reef",
+        channel: "discord",
         accountId: "default",
         guildId: "support-guild",
         roles: ["support"],
       },
+      routeContext: { guildId: "support-guild", memberRoleIds: ["support"] },
       peer: { kind: "channel" as const, id: "support-room" },
-      hasThreadContext: false,
     },
     {
       name: "team",
-      match: { channel: "reef", accountId: "default", teamId: "support-team" },
+      match: { channel: "slack", accountId: "default", teamId: "support-team" },
+      routeContext: { teamId: "support-team" },
       peer: { kind: "channel" as const, id: "support-room" },
-      hasThreadContext: false,
     },
     {
       name: "parent peer",
@@ -34,10 +34,11 @@ describe("isConversationRouteEligibleForAgent", () => {
         accountId: "default",
         peer: { kind: "channel" as const, id: "support-parent" },
       },
+      routeContext: { parentPeerId: "support-parent" },
       peer: { kind: "channel" as const, id: "support-thread" },
-      hasThreadContext: true,
     },
   ])("requires session provenance for unresolved $name context", (testCase) => {
+    const channel = testCase.match.channel;
     const params = {
       config: {
         agents: { entries: { main: {}, finance: {} } },
@@ -47,16 +48,15 @@ describe("isConversationRouteEligibleForAgent", () => {
             agentId: "finance",
             match: testCase.match as AgentBindingMatch,
           },
-          fallbackBinding,
+          { ...fallbackBinding, match: { ...fallbackBinding.match, channel } },
         ],
       },
       agentId: "finance",
       conversation: {
-        channel: "reef",
+        channel,
         accountId: "default",
         kind: testCase.peer.kind,
         peerId: testCase.peer.id,
-        ...(testCase.hasThreadContext ? { threadId: "thread-1" } : {}),
       },
     };
 
@@ -64,7 +64,11 @@ describe("isConversationRouteEligibleForAgent", () => {
     expect(
       isConversationRouteEligibleForAgent({
         ...params,
-        conversation: { ...params.conversation, observedFromSession: true },
+        conversation: {
+          ...params.conversation,
+          observedFromSession: true,
+          routeContext: testCase.routeContext,
+        },
       }),
     ).toBe(true);
   });
@@ -89,6 +93,37 @@ describe("isConversationRouteEligibleForAgent", () => {
           kind: "direct",
           peerId: "molty",
           observedFromSession: true,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not let an unrelated contextual binding revive a reassigned route", () => {
+    expect(
+      isConversationRouteEligibleForAgent({
+        config: {
+          agents: { entries: { main: {}, finance: {}, support: {} } },
+          bindings: [
+            {
+              type: "route",
+              agentId: "support",
+              match: { channel: "discord", accountId: "default", guildId: "guild-a" },
+            },
+            {
+              type: "route",
+              agentId: "finance",
+              match: { channel: "discord", accountId: "default", guildId: "guild-b" },
+            },
+          ],
+        },
+        agentId: "finance",
+        conversation: {
+          channel: "discord",
+          accountId: "default",
+          kind: "channel",
+          peerId: "ops-room",
+          observedFromSession: true,
+          routeContext: { guildId: "guild-a" },
         },
       }),
     ).toBe(false);

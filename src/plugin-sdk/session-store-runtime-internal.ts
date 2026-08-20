@@ -73,6 +73,9 @@ export function generationValidPrivateFieldsForSameSession(
     ...(existingEntry.activeWriterRunId !== undefined
       ? { activeWriterRunId: existingEntry.activeWriterRunId }
       : {}),
+    ...(existingEntry.conversationRouteContext
+      ? { conversationRouteContext: existingEntry.conversationRouteContext }
+      : {}),
     ...(existingEntry.lifecycleRunId !== undefined
       ? { lifecycleRunId: existingEntry.lifecycleRunId }
       : {}),

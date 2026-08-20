@@ -11,6 +11,7 @@ import { clearAllCliSessions, getCliSessionBinding } from "../../agents/cli-sess
 import { resetRegisteredAgentHarnessSessions } from "../../agents/harness/registry.js";
 import { cleanupBrowserSessionsForLifecycleEnd } from "../../browser-lifecycle-cleanup.js";
 import { normalizeChatType } from "../../channels/chat-type.js";
+import { conversationRouteContextFromMsgContext } from "../../config/sessions/conversation-route-context.js";
 import { resolveGroupSessionKey } from "../../config/sessions/group.js";
 import {
   hasTerminalMainSessionTranscriptNewerThanRegistry,
@@ -51,6 +52,7 @@ import {
   DEFAULT_RESET_TRIGGERS,
   SESSION_TOTAL_TOKENS_VERSION,
   type GroupKeyResolution,
+  type InternalSessionEntry,
   type SessionEntry,
   type SessionScope,
 } from "../../config/sessions/types.js";
@@ -522,7 +524,7 @@ async function initSessionStateAttemptLocked(
   const sessionScope = sessionCfg?.scope ?? "per-sender";
   const ingressTimingEnabled = isDiagnosticFlagEnabled("ingress.timing", cfg);
 
-  let sessionEntry: SessionEntry;
+  let sessionEntry: InternalSessionEntry;
 
   let sessionId: string | undefined;
   let isNewSession = false;
@@ -923,6 +925,10 @@ async function initSessionStateAttemptLocked(
   });
   if (metaPatch) {
     sessionEntry = { ...sessionEntry, ...metaPatch };
+  }
+  if (!isSystemEvent && sessionCtxForState.InboundAccessAuthorized === true) {
+    sessionEntry.conversationRouteContext =
+      conversationRouteContextFromMsgContext(sessionCtxForState);
   }
   if (isSystemEvent && !isThread) {
     sessionEntry = {

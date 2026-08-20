@@ -437,6 +437,36 @@ afterEach(async () => {
   await sessionMcpTesting.resetSessionMcpRuntimeManager();
 });
 describe("initSessionState guarded initialization", () => {
+  it("persists exact contextual route facts from an admitted channel turn", async () => {
+    const storePath = await createStorePath("openclaw-session-route-context-");
+    const sessionKey = "agent:main:discord:channel:ops";
+    const result = await initSessionState({
+      ctx: {
+        Body: "hello ops",
+        ChatType: "channel",
+        From: "discord:channel:ops",
+        To: "channel:ops",
+        OriginatingChannel: "discord",
+        Provider: "discord",
+        SessionKey: sessionKey,
+        GroupSpace: "guild-a",
+        MemberRoleIds: ["support"],
+        ThreadParentId: "parent-a",
+        InboundAccessAuthorized: true,
+      },
+      cfg: { session: { store: storePath } } as OpenClawConfig,
+    });
+
+    expect(result.sessionEntry.conversationRouteContext).toEqual({
+      guildId: "guild-a",
+      parentPeerId: "parent-a",
+      memberRoleIds: ["support"],
+    });
+    expect(loadSessionEntry({ storePath, sessionKey })?.conversationRouteContext).toEqual(
+      result.sessionEntry.conversationRouteContext,
+    );
+  });
+
   it("registers per-group ambient visibility when direct messages use isolated sessions", async () => {
     const stateDir = await makeCaseDir("openclaw-per-group-main-watch-");
     const storePath = path.join(stateDir, "sessions.json");
