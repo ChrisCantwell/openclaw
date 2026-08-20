@@ -160,6 +160,11 @@ function hasPendingSessionProjectColumn(db: DatabaseSync): boolean {
   return Boolean(columns && !columns.has("project_id"));
 }
 
+function hasPendingSessionConversationRouteContextColumn(db: DatabaseSync): boolean {
+  const columns = readSqliteTableColumns(db, "session_conversations");
+  return Boolean(columns && !columns.has("route_context_json"));
+}
+
 function migrateMemoryChunkMetadataSchema(db: DatabaseSync): void {
   ensureMemoryRecallMetadataSchema(db);
   ensureMemoryChunkProvenance(db);
@@ -570,7 +575,8 @@ export function assertAgentDatabaseIntegrityBeforeMutation(
     (hasPendingMemoryChunkMetadataMigration(database) ||
       hasPendingSessionKeyContractSchemaMigration(database) ||
       hasRetiredAgentStateLeaseSchema(database) ||
-      hasPendingSessionProjectColumn(database));
+      hasPendingSessionProjectColumn(database) ||
+      hasPendingSessionConversationRouteContextColumn(database));
   if (userVersion === OPENCLAW_AGENT_SCHEMA_VERSION && !hasPendingCurrentVersionMigration) {
     verifyAndRepairCanonicalSqliteIndexes(database, pathname, OPENCLAW_AGENT_SCHEMA_SQL, {
       allowMissingColumns: true,

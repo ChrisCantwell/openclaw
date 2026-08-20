@@ -11,6 +11,8 @@ import {
   listConversations,
   registerConversationAddresses,
   resolveConversationRegistryScope,
+  resolveConversationScanBoundary,
+  scanConversations,
   type ConversationRecord,
   type ConversationRegistryScope,
 } from "../config/sessions/conversation-registry.js";
@@ -26,6 +28,8 @@ const log = createSubsystemLogger("gateway/conversations");
 
 type ConversationListDeps = {
   listConversations: typeof listConversations;
+  resolveConversationScanBoundary: typeof resolveConversationScanBoundary;
+  scanConversations: typeof scanConversations;
   registerConversationAddresses: typeof registerConversationAddresses;
   resolveOutboundChannelPlugin: typeof resolveOutboundChannelPlugin;
   resolveOutboundSessionRoute: typeof resolveOutboundSessionRoute;
@@ -33,6 +37,8 @@ type ConversationListDeps = {
 
 const defaultDeps: ConversationListDeps = {
   listConversations,
+  resolveConversationScanBoundary,
+  scanConversations,
   registerConversationAddresses,
   resolveOutboundChannelPlugin,
   resolveOutboundSessionRoute,
@@ -224,6 +230,12 @@ function matchesConversationQuery(conversation: ConversationRecord, rawQuery: st
   return terms.some((term) => term && values.some((value) => value.includes(term)));
 }
 
+function compareConversationRecency(left: ConversationRecord, right: ConversationRecord): number {
+  return (
+    right.lastSeenAt - left.lastSeenAt || left.conversationRef.localeCompare(right.conversationRef)
+  );
+}
+
 /** Lists persisted and channel-directory addresses from the Gateway's live plugin runtime. */
 export async function runGatewayConversationList(
   params: {
@@ -250,13 +262,8 @@ export async function runGatewayConversationList(
     : undefined;
   const selected: ConversationRecord[] = [];
   const pageSize = Math.max(1, params.limit);
-  let offset = 0;
-  while (selected.length < params.limit) {
-    const conversations = deps.listConversations(scope, {
-      ...(discovery ? { channel: discovery.channel } : {}),
-      limit: pageSize,
-      offset,
-    });
+  const channel = discovery?.channel;
+  const consider = (conversations: readonly ConversationRecord[]) => {
     for (const conversation of conversations) {
       if (
         isConversationRouteEligibleForAgent({
@@ -269,15 +276,33 @@ export async function runGatewayConversationList(
           matchesConversationQuery(conversation, query))
       ) {
         selected.push(conversation);
-        if (selected.length === params.limit) {
-          break;
+        selected.sort(compareConversationRecency);
+        if (selected.length > params.limit) {
+          selected.pop();
         }
       }
     }
-    if (conversations.length < pageSize || selected.length === params.limit) {
+  };
+  const throughCursor = deps.resolveConversationScanBoundary(scope, channel ? { channel } : {});
+  if (throughCursor === undefined) {
+    return { conversations: [] };
+  }
+  let afterCursor: number | undefined;
+  while (true) {
+    const page = deps.scanConversations(scope, {
+      ...(channel ? { channel } : {}),
+      limit: pageSize,
+      ...(afterCursor !== undefined ? { afterCursor } : {}),
+      throughCursor,
+    });
+    consider(page.conversations);
+    if (page.conversations.length < pageSize) {
       break;
     }
-    offset += conversations.length;
+    if (page.cursor === undefined || page.cursor === afterCursor) {
+      break;
+    }
+    afterCursor = page.cursor;
     await new Promise<void>((resolve) => setImmediate(resolve));
   }
   return { conversations: selected.map(presentConversation) };

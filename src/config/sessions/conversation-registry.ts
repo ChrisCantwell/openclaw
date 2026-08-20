@@ -1,5 +1,6 @@
 import { safeParseJsonRecord } from "@openclaw/normalization-core/json-coercion";
 import { normalizeOptionalLowercaseString } from "@openclaw/normalization-core/string-coerce";
+import { sql } from "kysely";
 import { executeSqliteQuerySync } from "../../infra/kysely-sync.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { openOpenClawAgentDatabase } from "../../state/openclaw-agent-db.js";
@@ -49,6 +50,16 @@ export type ConversationRegistryScope = {
   storePath?: string;
 };
 
+type ConversationListOptions = {
+  channel?: string;
+  limit?: number;
+};
+
+export type ConversationScanPage = {
+  conversations: ConversationRecord[];
+  cursor?: number;
+};
+
 export function resolveConversationRegistryScope(params: {
   agentId: string;
   config: OpenClawConfig;
@@ -68,6 +79,26 @@ function normalizeConversationRef(value: string): string {
     throw new Error(`Invalid conversationRef: ${value}`);
   }
   return normalized;
+}
+
+function openConversationRegistry(scope: ConversationRegistryScope) {
+  const resolved = resolveSqliteReadScope({
+    agentId: scope.agentId,
+    ...(scope.env ? { env: scope.env } : {}),
+    ...(scope.storePath ? { storePath: scope.storePath } : {}),
+  });
+  const database = openOpenClawAgentDatabase(toDatabaseOptions(resolved));
+  return { database, db: getSessionKysely(database.db) };
+}
+
+function conversationRowId() {
+  return /* kysely-allow-raw: SQLite rowid is the immutable insertion cursor for a stable bounded scan. */ sql<number>`c.rowid`;
+}
+
+function maxConversationRowId() {
+  return /* kysely-allow-raw: Freeze the highest immutable rowid before yielding between bounded pages. */ sql<
+    number | null
+  >`MAX(c.rowid)`;
 }
 
 type MappedConversationRow = {
@@ -168,20 +199,16 @@ function mapConversationRow(
 
 function selectConversationRows(
   scope: ConversationRegistryScope,
-  options: { channel?: string; conversationRef?: string; limit?: number; offset?: number } = {},
-): ConversationRecord[] {
-  const resolved = resolveSqliteReadScope({
-    agentId: scope.agentId,
-    ...(scope.env ? { env: scope.env } : {}),
-    ...(scope.storePath ? { storePath: scope.storePath } : {}),
-  });
-  const database = openOpenClawAgentDatabase(toDatabaseOptions(resolved));
-  const db = getSessionKysely(database.db);
+  options: ConversationListOptions & {
+    conversationRef?: string;
+    afterRowId?: number;
+    throughRowId?: number;
+  } = {},
+): ConversationScanPage {
+  const { database, db } = openConversationRegistry(scope);
   let pageQuery = db
     .selectFrom("conversations as c")
-    .select("c.conversation_id")
-    .orderBy("c.updated_at", "desc")
-    .orderBy("c.conversation_id", "asc");
+    .select(["c.conversation_id", conversationRowId().as("conversation_rowid")]);
   const channel = normalizeOptionalLowercaseString(options.channel);
   if (channel) {
     pageQuery = pageQuery.where("c.channel", "=", channel);
@@ -193,17 +220,23 @@ function selectConversationRows(
       normalizeConversationRef(options.conversationRef),
     );
   }
+  const stableScan = options.throughRowId !== undefined;
+  if (options.afterRowId !== undefined) {
+    pageQuery = pageQuery.where(conversationRowId(), ">", options.afterRowId);
+  }
+  if (options.throughRowId !== undefined) {
+    pageQuery = pageQuery.where(conversationRowId(), "<=", options.throughRowId);
+  }
+  pageQuery = stableScan
+    ? pageQuery.orderBy(conversationRowId(), "asc")
+    : pageQuery.orderBy("c.updated_at", "desc").orderBy("c.conversation_id", "asc");
   if (options.limit !== undefined) {
     pageQuery = pageQuery.limit(Math.max(0, Math.trunc(options.limit)));
   }
-  if (options.offset !== undefined) {
-    pageQuery = pageQuery.offset(Math.max(0, Math.trunc(options.offset)));
-  }
-  const conversationIds = executeSqliteQuerySync(database.db, pageQuery).rows.map(
-    (row) => row.conversation_id,
-  );
+  const pageRows = executeSqliteQuerySync(database.db, pageQuery).rows;
+  const conversationIds = pageRows.map((row) => row.conversation_id);
   if (conversationIds.length === 0) {
-    return [];
+    return { conversations: [] };
   }
   const query = db
     .selectFrom("conversations as c")
@@ -236,13 +269,12 @@ function selectConversationRows(
       "sn.session_key as current_session_key",
     ])
     .where("c.conversation_id", "in", conversationIds);
+  const orderedQuery = stableScan
+    ? query.orderBy(conversationRowId(), "asc")
+    : query.orderBy("c.updated_at", "desc").orderBy("c.conversation_id", "asc");
   const rows = executeSqliteQuerySync(
     database.db,
-    query
-      .orderBy("c.updated_at", "desc")
-      .orderBy("c.conversation_id", "asc")
-      .orderBy("sc.last_seen_at", "desc")
-      .orderBy("sn.updated_at", "desc"),
+    orderedQuery.orderBy("sc.last_seen_at", "desc").orderBy("sn.updated_at", "desc"),
   ).rows;
   const unique = new Map<string, MappedConversationRow>();
   for (const row of rows) {
@@ -279,7 +311,11 @@ function selectConversationRows(
       });
     }
   }
-  return [...unique.values()].map((entry) => entry.record);
+  const cursor = stableScan ? pageRows.at(-1)?.conversation_rowid : undefined;
+  return {
+    conversations: [...unique.values()].map((entry) => entry.record),
+    ...(cursor !== undefined ? { cursor } : {}),
+  };
 }
 
 /** Catalogs routable addresses without creating model-context sessions. */
@@ -291,12 +327,7 @@ export function registerConversationAddresses(
   if (identities.length === 0) {
     return;
   }
-  const resolved = resolveSqliteReadScope({
-    agentId: scope.agentId,
-    ...(scope.env ? { env: scope.env } : {}),
-    ...(scope.storePath ? { storePath: scope.storePath } : {}),
-  });
-  const database = openOpenClawAgentDatabase(toDatabaseOptions(resolved));
+  const { database } = openConversationRegistry(scope);
   for (const identity of identities) {
     upsertConversationIdentity(database, identity, discoveredAt);
   }
@@ -305,9 +336,41 @@ export function registerConversationAddresses(
 /** Lists stable external addresses for one agent, newest activity first. */
 export function listConversations(
   scope: ConversationRegistryScope,
-  options: { channel?: string; limit?: number; offset?: number } = {},
+  options: ConversationListOptions = {},
 ): ConversationRecord[] {
-  return selectConversationRows(scope, options);
+  return selectConversationRows(scope, options).conversations;
+}
+
+/** Freezes the current insertion sequence for a paged registry scan. */
+export function resolveConversationScanBoundary(
+  scope: ConversationRegistryScope,
+  options: Pick<ConversationListOptions, "channel"> = {},
+): number | undefined {
+  const { database, db } = openConversationRegistry(scope);
+  let query = db
+    .selectFrom("conversations as c")
+    .select(maxConversationRowId().as("conversation_rowid"));
+  const channel = normalizeOptionalLowercaseString(options.channel);
+  if (channel) {
+    query = query.where("c.channel", "=", channel);
+  }
+  return executeSqliteQuerySync(database.db, query).rows[0]?.conversation_rowid ?? undefined;
+}
+
+/** Reads one immutable insertion-order page within a frozen registry boundary. */
+export function scanConversations(
+  scope: ConversationRegistryScope,
+  options: Pick<ConversationListOptions, "channel" | "limit"> & {
+    afterCursor?: number;
+    throughCursor: number;
+  },
+): ConversationScanPage {
+  return selectConversationRows(scope, {
+    ...(options.channel ? { channel: options.channel } : {}),
+    ...(options.limit !== undefined ? { limit: options.limit } : {}),
+    ...(options.afterCursor !== undefined ? { afterRowId: options.afterCursor } : {}),
+    throughRowId: options.throughCursor,
+  });
 }
 
 /** Resolves an opaque address to one exact channel target and its context binding, when present. */
@@ -318,5 +381,5 @@ export function resolveConversation(
   return selectConversationRows(scope, {
     conversationRef: normalizeConversationRef(conversationRef),
     limit: 1,
-  })[0];
+  }).conversations[0];
 }

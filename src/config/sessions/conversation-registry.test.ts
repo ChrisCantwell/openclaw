@@ -13,6 +13,8 @@ import {
   listConversations,
   registerConversationAddresses,
   resolveConversation,
+  resolveConversationScanBoundary,
+  scanConversations,
 } from "./conversation-registry.js";
 import {
   deleteSessionEntryLifecycle,
@@ -282,6 +284,50 @@ describe("conversation registry", () => {
         lastSeenAt: freshAt,
       }),
     ]);
+  });
+
+  it("scans one frozen insertion range despite concurrent activity and inserts", () => {
+    const identities = ["peer-a", "peer-b", "peer-c"]
+      .map((peerId) =>
+        buildConversationIdentity({
+          channel: "reef",
+          accountId: "default",
+          kind: "direct",
+          peerId: `reef:${peerId}`,
+          deliveryTarget: `reef:${peerId}`,
+        }),
+      )
+      .filter((identity) => identity !== null);
+    expect(identities).toHaveLength(3);
+    registerConversationAddresses({ agentId: "main", storePath }, identities, 100);
+    const throughCursor = resolveConversationScanBoundary({ agentId: "main", storePath });
+    expect(throughCursor).toBeDefined();
+    const firstPage = scanConversations(
+      { agentId: "main", storePath },
+      { limit: 1, throughCursor: throughCursor! },
+    );
+    expect(firstPage.cursor).toBeDefined();
+
+    registerConversationAddresses({ agentId: "main", storePath }, [identities[0]!], 1_000);
+    const laterIdentity = buildConversationIdentity({
+      channel: "reef",
+      accountId: "default",
+      kind: "direct",
+      peerId: "reef:peer-later",
+      deliveryTarget: "reef:peer-later",
+    });
+    expect(laterIdentity).toBeDefined();
+    registerConversationAddresses({ agentId: "main", storePath }, [laterIdentity!], 2_000);
+
+    const secondPage = scanConversations(
+      { agentId: "main", storePath },
+      { afterCursor: firstPage.cursor!, limit: 10, throughCursor: throughCursor! },
+    );
+    expect(
+      [...firstPage.conversations, ...secondPage.conversations].map(
+        (conversation) => conversation.conversationRef,
+      ),
+    ).toEqual(identities.map((identity) => identity!.conversationRef));
   });
 
   it("keeps a live binding when newer historical activity has no current entry", async () => {

@@ -3,6 +3,27 @@ import type { ConversationIdentity } from "../config/sessions/conversation-ident
 import type { ConversationRecord } from "../config/sessions/conversation-registry.js";
 import { runGatewayConversationList } from "./conversation-list.js";
 
+function withScanDeps<
+  T extends {
+    listConversations: (
+      scope: unknown,
+      options?: { channel?: string; limit?: number },
+    ) => ConversationRecord[];
+  },
+>(deps: T) {
+  return {
+    ...deps,
+    resolveConversationScanBoundary: vi.fn(() => 1),
+    scanConversations: vi.fn((scope: unknown, options: { channel?: string; limit?: number }) => ({
+      conversations: deps.listConversations(scope, {
+        ...(options.channel ? { channel: options.channel } : {}),
+        ...(options.limit !== undefined ? { limit: options.limit } : {}),
+      }),
+      cursor: 1,
+    })),
+  };
+}
+
 describe("runGatewayConversationList", () => {
   it("reads bounded pages until the requested number of eligible conversations is found", async () => {
     const foreign: ConversationRecord = {
@@ -25,8 +46,10 @@ describe("runGatewayConversationList", () => {
       firstSeenAt: 100,
       lastSeenAt: 100,
     };
-    const listConversations = vi.fn((_scope, options) =>
-      options?.offset === 1 ? [owned] : [foreign],
+    const scanConversations = vi.fn((_scope, options) =>
+      options?.afterCursor
+        ? { conversations: [owned], cursor: 2 }
+        : { conversations: [foreign], cursor: 1 },
     );
 
     const result = await runGatewayConversationList(
@@ -41,7 +64,9 @@ describe("runGatewayConversationList", () => {
         limit: 1,
       },
       {
-        listConversations,
+        listConversations: vi.fn(),
+        resolveConversationScanBoundary: vi.fn(() => 2),
+        scanConversations,
         registerConversationAddresses: vi.fn(),
         resolveOutboundChannelPlugin: vi.fn(),
         resolveOutboundSessionRoute: vi.fn(),
@@ -51,14 +76,67 @@ describe("runGatewayConversationList", () => {
     expect(result.conversations).toEqual([
       expect.objectContaining({ conversationRef: owned.conversationRef }),
     ]);
-    expect(listConversations).toHaveBeenNthCalledWith(1, expect.anything(), {
+    expect(scanConversations).toHaveBeenNthCalledWith(1, expect.anything(), {
       limit: 1,
-      offset: 0,
+      throughCursor: 2,
     });
-    expect(listConversations).toHaveBeenNthCalledWith(2, expect.anything(), {
+    expect(scanConversations).toHaveBeenNthCalledWith(2, expect.anything(), {
+      afterCursor: 1,
       limit: 1,
-      offset: 1,
+      throughCursor: 2,
     });
+  });
+
+  it("does not duplicate conversations when activity changes between pages", async () => {
+    const record = (
+      conversationRef: string,
+      accountId: string,
+      lastSeenAt: number,
+    ): ConversationRecord => ({
+      conversationRef,
+      channel: "reef",
+      accountId,
+      kind: "channel",
+      target: `channel:${accountId}`,
+      peerId: accountId,
+      firstSeenAt: 100,
+      lastSeenAt,
+    });
+    const foreign = record("conv_00000000000000000000000000000001", "finance", 300);
+    const ownedA = record("conv_00000000000000000000000000000002", "support", 200);
+    const ownedB = record("conv_00000000000000000000000000000003", "support", 100);
+    const scanConversations = vi.fn((_scope, options) => {
+      if (options?.afterCursor) {
+        return { conversations: [ownedB], cursor: 3 };
+      }
+      return { conversations: [foreign, ownedA], cursor: 2 };
+    });
+
+    const result = await runGatewayConversationList(
+      {
+        config: {
+          bindings: [
+            { agentId: "finance", match: { channel: "reef", accountId: "finance" } },
+            { agentId: "support", match: { channel: "reef", accountId: "support" } },
+          ],
+        },
+        agentId: "support",
+        limit: 2,
+      },
+      {
+        listConversations: vi.fn(),
+        resolveConversationScanBoundary: vi.fn(() => 3),
+        scanConversations,
+        registerConversationAddresses: vi.fn(),
+        resolveOutboundChannelPlugin: vi.fn(),
+        resolveOutboundSessionRoute: vi.fn(),
+      } as never,
+    );
+
+    expect(result.conversations.map((conversation) => conversation.conversationRef)).toEqual([
+      ownedA.conversationRef,
+      ownedB.conversationRef,
+    ]);
   });
   it("discovers a trusted directory peer without creating a session", async () => {
     let discovered: ConversationIdentity[] = [];
@@ -105,7 +183,7 @@ describe("runGatewayConversationList", () => {
 
     const result = await runGatewayConversationList(
       { config: {}, agentId: "main", channel: "reef", query: "@molty", limit: 50 },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(listPeers).toHaveBeenCalledWith(
@@ -113,7 +191,7 @@ describe("runGatewayConversationList", () => {
     );
     expect(deps.listConversations).toHaveBeenCalledWith(
       { agentId: "main" },
-      { channel: "reef", limit: 50, offset: 0 },
+      { channel: "reef", limit: 50 },
     );
     expect(resolveOutboundSessionRoute).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -195,7 +273,7 @@ describe("runGatewayConversationList", () => {
         channel: "reef",
         limit: 50,
       },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(discovered).toEqual([
@@ -256,7 +334,7 @@ describe("runGatewayConversationList", () => {
         limit: 1,
         ...input,
       },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(result.conversations).toEqual([
@@ -267,7 +345,6 @@ describe("runGatewayConversationList", () => {
       {
         ...(input.channel ? { channel: "reef" } : {}),
         limit: 1,
-        offset: 0,
       },
     );
   });
@@ -314,7 +391,7 @@ describe("runGatewayConversationList", () => {
       limit: 10,
     };
 
-    await expect(runGatewayConversationList(params, deps as never)).resolves.toEqual({
+    await expect(runGatewayConversationList(params, withScanDeps(deps) as never)).resolves.toEqual({
       conversations: [],
     });
     deps.listConversations.mockReturnValueOnce([
@@ -324,7 +401,7 @@ describe("runGatewayConversationList", () => {
         routeContext: { guildId: "support-guild", memberRoleIds: ["support"] },
       },
     ]);
-    await expect(runGatewayConversationList(params, deps as never)).resolves.toEqual({
+    await expect(runGatewayConversationList(params, withScanDeps(deps) as never)).resolves.toEqual({
       conversations: [expect.objectContaining({ conversationRef: contextual.conversationRef })],
     });
 
@@ -360,7 +437,7 @@ describe("runGatewayConversationList", () => {
             ],
           },
         },
-        deps as never,
+        withScanDeps(deps) as never,
       ),
     ).resolves.toEqual({ conversations: [] });
   });
@@ -399,7 +476,7 @@ describe("runGatewayConversationList", () => {
 
     await runGatewayConversationList(
       { config: {}, agentId: "main", channel: "discord", limit: 50 },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(discovered).toEqual([
@@ -447,7 +524,7 @@ describe("runGatewayConversationList", () => {
 
     await runGatewayConversationList(
       { config: {}, agentId: "main", channel: "reef", limit: 50 },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(resolveOutboundSessionRoute).toHaveBeenCalledWith(
@@ -515,7 +592,7 @@ describe("runGatewayConversationList", () => {
 
     await runGatewayConversationList(
       { config: {}, agentId: "main", channel: "discord", limit: 50 },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(listPeersLive).toHaveBeenCalledOnce();
@@ -574,11 +651,11 @@ describe("runGatewayConversationList", () => {
 
     await runGatewayConversationList(
       { config: {}, agentId: "main", channel: "discord", limit: 50 },
-      deps as never,
+      withScanDeps(deps) as never,
     );
     await runGatewayConversationList(
       { config: {}, agentId: "main", channel: "discord", limit: 50 },
-      deps as never,
+      withScanDeps(deps) as never,
     );
 
     expect(listPeers).toHaveBeenCalledTimes(2);

@@ -5,7 +5,7 @@ import type { ConversationRecord } from "../config/sessions/conversation-registr
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeAccountId } from "../routing/account-id.js";
 import { normalizeRouteBindingId } from "../routing/binding-scope.js";
-import { resolveAgentRoute } from "../routing/resolve-route.js";
+import { resolveAgentRoute, type ResolvedAgentRoute } from "../routing/resolve-route.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 
 type ConversationRouteCandidate = Pick<
@@ -20,26 +20,27 @@ type ConversationRouteCandidate = Pick<
   | "threadId"
 >;
 
-function resolveRouteAgentId(
+type ResolvedRouteOwner = Pick<ResolvedAgentRoute, "agentId" | "matchedBy">;
+
+function resolveRouteOwner(
   config: OpenClawConfig,
   conversation: ConversationRouteCandidate,
   context?: NonNullable<ConversationRouteCandidate["routeContext"]>,
-): string | undefined {
+): ResolvedRouteOwner | undefined {
   try {
-    return normalizeAgentId(
-      resolveAgentRoute({
-        cfg: config,
-        channel: conversation.channel,
-        accountId: conversation.accountId,
-        peer: { kind: conversation.kind, id: conversation.peerId },
-        ...(context?.parentPeerId && conversation.kind !== "direct"
-          ? { parentPeer: { kind: conversation.kind, id: context.parentPeerId } }
-          : {}),
-        ...(context?.guildId ? { guildId: context.guildId } : {}),
-        ...(context?.teamId ? { teamId: context.teamId } : {}),
-        ...(context?.memberRoleIds ? { memberRoleIds: context.memberRoleIds } : {}),
-      }).agentId,
-    );
+    const route = resolveAgentRoute({
+      cfg: config,
+      channel: conversation.channel,
+      accountId: conversation.accountId,
+      peer: { kind: conversation.kind, id: conversation.peerId },
+      ...(context?.parentPeerId && conversation.kind !== "direct"
+        ? { parentPeer: { kind: conversation.kind, id: context.parentPeerId } }
+        : {}),
+      ...(context?.guildId ? { guildId: context.guildId } : {}),
+      ...(context?.teamId ? { teamId: context.teamId } : {}),
+      ...(context?.memberRoleIds ? { memberRoleIds: context.memberRoleIds } : {}),
+    });
+    return { agentId: normalizeAgentId(route.agentId), matchedBy: route.matchedBy };
   } catch (error) {
     if (error instanceof AgentSelectionRequiredError) {
       return undefined;
@@ -82,13 +83,16 @@ export function isConversationRouteEligibleForAgent(params: {
   const agentId = normalizeAgentId(params.agentId);
   const conversation = params.conversation;
   if (conversation.observedFromSession && conversation.routeContext) {
-    return resolveRouteAgentId(params.config, conversation, conversation.routeContext) === agentId;
+    return (
+      resolveRouteOwner(params.config, conversation, conversation.routeContext)?.agentId === agentId
+    );
   }
-  if (resolveRouteAgentId(params.config, conversation) !== agentId) {
+  const route = resolveRouteOwner(params.config, conversation);
+  if (route?.agentId !== agentId) {
     return false;
   }
-  return (
-    !conversation.observedFromSession ||
-    !hasUnrecordedContextualBinding(params.config, conversation)
-  );
+  if (route.matchedBy === "binding.peer" || route.matchedBy === "binding.peer.wildcard") {
+    return true;
+  }
+  return !hasUnrecordedContextualBinding(params.config, conversation);
 }

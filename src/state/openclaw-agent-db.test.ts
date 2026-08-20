@@ -3493,6 +3493,7 @@ describe("openclaw agent database", () => {
         DROP INDEX idx_agent_session_nodes_entry_valid_pending;
         DROP TABLE session_key_contract;
         ALTER TABLE session_nodes DROP COLUMN entry_valid;
+        ALTER TABLE session_conversations DROP COLUMN route_context_json;
       `);
       expect(readSqliteNumberPragma(shippedSchema, "user_version")).toBe(
         OPENCLAW_AGENT_SCHEMA_VERSION,
@@ -3501,7 +3502,7 @@ describe("openclaw agent database", () => {
       shippedSchema.close();
     }
 
-    const repaired = migrateAndOpenLegacyAgentDatabaseForTest({ agentId: "worker-1", env });
+    const repaired = openOpenClawAgentDatabase({ agentId: "worker-1", env });
     expect(normalizeSqliteSchemaShapeSql(collectSqliteSchemaShape(repaired.db))).toEqual(
       normalizeSqliteSchemaShapeSql(
         createSqliteSchemaShapeFromSql(new URL("./openclaw-agent-schema.sql", import.meta.url)),
@@ -3515,6 +3516,13 @@ describe("openclaw agent database", () => {
     expect(
       repaired.db.prepare("SELECT main_key FROM session_key_contract WHERE id = 1").get(),
     ).toEqual({ main_key: "main" });
+    expect(
+      repaired.db
+        .prepare(
+          "SELECT name FROM pragma_table_info('session_conversations') WHERE name = 'route_context_json'",
+        )
+        .get(),
+    ).toEqual({ name: "route_context_json" });
   });
 
   it("installs same-version session additions before maintenance index repair", () => {

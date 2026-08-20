@@ -161,4 +161,75 @@ describe("isConversationRouteEligibleForAgent", () => {
       false,
     );
   });
+
+  it("does not let a directory-only route bypass a contextual binding", () => {
+    const config = {
+      agents: { entries: { main: {}, finance: {} } },
+      bindings: [
+        {
+          type: "route" as const,
+          agentId: "finance",
+          match: { channel: "discord", accountId: "default", guildId: "guild-a" },
+        },
+        {
+          type: "route" as const,
+          agentId: "main",
+          match: { channel: "discord", accountId: "default" },
+        },
+      ],
+    };
+    const conversation = {
+      channel: "discord",
+      accountId: "default",
+      kind: "channel" as const,
+      peerId: "ops-room",
+    };
+
+    expect(isConversationRouteEligibleForAgent({ config, agentId: "finance", conversation })).toBe(
+      false,
+    );
+    expect(isConversationRouteEligibleForAgent({ config, agentId: "main", conversation })).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    { name: "exact", peerId: "support-room" },
+    { name: "wildcard", peerId: "*" },
+  ])("keeps a threaded route selected by a $name current-peer binding", ({ peerId }) => {
+    const config = {
+      agents: { entries: { main: {}, finance: {} } },
+      bindings: [
+        {
+          type: "route" as const,
+          agentId: "finance",
+          match: {
+            channel: "telegram",
+            accountId: "default",
+            peer: { kind: "group" as const, id: peerId },
+          },
+        },
+        {
+          type: "route" as const,
+          agentId: "main",
+          match: { channel: "telegram", accountId: "default" },
+        },
+      ],
+    };
+    const conversation = {
+      channel: "telegram",
+      accountId: "default",
+      kind: "group" as const,
+      peerId: "support-room",
+      threadId: "topic-7",
+      observedFromSession: true as const,
+    };
+
+    expect(isConversationRouteEligibleForAgent({ config, agentId: "finance", conversation })).toBe(
+      true,
+    );
+    expect(isConversationRouteEligibleForAgent({ config, agentId: "main", conversation })).toBe(
+      false,
+    );
+  });
 });

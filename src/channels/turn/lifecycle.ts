@@ -87,7 +87,12 @@ export function assembleResolvedChannelTurn<
     const { cfg, route, ...turn } = value;
     return {
       ...turn,
-      ctxPayload: applyRouteDmScope(turn.ctxPayload, route.dmScope),
+      // Routed plugin dispatch is the legacy post-admission boundary. Stamp the
+      // accepted fact here so all trusted channel owners persist route evidence.
+      ctxPayload: applyRouteDmScope(
+        { ...turn.ctxPayload, InboundAccessAuthorized: true },
+        route.dmScope,
+      ),
       routeSessionKey: route.sessionKey,
       storePath: resolveSessionStorePathCore(cfg.session?.store, { agentId: route.agentId }),
       recordInboundSession,
@@ -96,7 +101,10 @@ export function assembleResolvedChannelTurn<
   const { cfg, route, ...turn } = value;
   const assembled: RoutedAssembledChannelTurn = {
     ...turn,
-    ctxPayload: applyRouteDmScope(turn.ctxPayload, route.dmScope),
+    ctxPayload: applyRouteDmScope(
+      { ...turn.ctxPayload, InboundAccessAuthorized: true },
+      route.dmScope,
+    ),
     cfg,
     agentId: route.agentId,
     routeSessionKey: route.sessionKey,

@@ -24,7 +24,7 @@ import { getChildLogger, resetLogger, setLoggerOverride } from "../../logging/lo
 import { outboundMessageIdentities } from "../message/outbound-echo-state.js";
 import type { RecordInboundSession } from "../session.types.js";
 import { runPreparedChannelTurn } from "./execution.js";
-import { dispatchAssembledChannelTurn } from "./lifecycle.js";
+import { dispatchAssembledChannelTurn, dispatchRoutedChannelTurn } from "./lifecycle.js";
 import type { ChannelTurnResult } from "./types.js";
 
 const deliverOutboundPayloads = vi.hoisted(() => vi.fn());
@@ -222,6 +222,27 @@ describe("channel turn pipeline", () => {
   afterEach(() => {
     setLoggerOverride(null);
     resetLogger();
+  });
+
+  it("records routed plugin turns as admitted inbound context", async () => {
+    await dispatchRoutedChannelTurn({
+      cfg,
+      channel: "mattermost",
+      accountId: "default",
+      route: { agentId: "main", sessionKey: "agent:main:mattermost:channel:ops" },
+      ctxPayload: createCtx({
+        Provider: "mattermost",
+        Surface: "mattermost",
+        SessionKey: "agent:main:mattermost:channel:ops",
+      }),
+      delivery: { deliver: async () => ({ visibleReplySent: true }) },
+    });
+
+    expect(recordInboundSessionCore).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctx: expect.objectContaining({ InboundAccessAuthorized: true }),
+      }),
+    );
   });
 
   it("emits and observes ordinary delivery before buffered dispatch continues", async () => {
