@@ -1076,16 +1076,22 @@ private final class WebChatSessionKeyRelay {
 @MainActor
 private final class WebChatAgentSelectionRelay {
     private(set) var selectedAgentID: String?
-    var onSelection: ((String) -> Void)?
+    private(set) var sessionRoutingContract: String?
+    var onSelection: ((String) -> Bool)?
 
-    init(selectedAgentID: String?) {
+    init(selectedAgentID: String?, sessionRoutingContract: String?) {
         self.selectedAgentID = WebChatRoute.normalizedAgentID(selectedAgentID)
+        self.sessionRoutingContract = sessionRoutingContract
+    }
+
+    func updateSessionRoutingContract(_ contract: String?) {
+        self.sessionRoutingContract = contract
     }
 
     func select(_ agentID: String) {
         guard let normalized = WebChatRoute.normalizedAgentID(agentID) else { return }
+        guard self.onSelection?(normalized) != false else { return }
         self.selectedAgentID = normalized
-        self.onSelection?(normalized)
     }
 }
 
@@ -1197,7 +1203,9 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
         let sessionKeyRelay = WebChatSessionKeyRelay()
         self.sessionKeyRelay = sessionKeyRelay
         let explicitAgentID = WebChatRoute.normalizedAgentID(explicitAgentID)
-        let agentSelectionRelay = WebChatAgentSelectionRelay(selectedAgentID: explicitAgentID)
+        let agentSelectionRelay = WebChatAgentSelectionRelay(
+            selectedAgentID: explicitAgentID,
+            sessionRoutingContract: initialSessionRoutingContract)
         self.agentSelectionRelay = agentSelectionRelay
         let vm = OpenClawChatViewModel(
             sessionKey: sessionKey,
@@ -1243,6 +1251,7 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
                     nil
                 }
                 if let routingIdentity {
+                    agentSelectionRelay.updateSessionRoutingContract(routingIdentity.contract)
                     // An explicit navigation agent owns this window; gateway
                     // default refreshes only supply the fallback route.
                     let effectiveAgentID = Self.effectiveAgentID(
@@ -1276,11 +1285,22 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
         self.contentController = hosting
         super.init()
         agentSelectionRelay.onSelection = { [weak self, weak vm] agentID in
-            guard let self, let vm else { return }
+            guard let self, let vm else { return false }
+            let selectedSessionKey = Self.sessionKey(
+                afterSelecting: agentID,
+                from: vm.sessionKey,
+                routingContract: agentSelectionRelay.sessionRoutingContract)
+            if selectedSessionKey != vm.sessionKey {
+                let draft = vm.input
+                vm.switchSession(to: selectedSessionKey)
+                guard vm.sessionKey == selectedSessionKey else { return false }
+                vm.input = draft
+            }
             (transport as? MacGatewayChatTransport)?.updateDefaultGlobalAgentID(agentID)
             vm.syncActiveAgentId(agentID)
             vm.errorText = nil
             self.onAgentIDChanged?(agentID)
+            return true
         }
         self.window = Self.makeWindow(
             contentViewController: self.contentController,
@@ -1371,6 +1391,36 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
         return WebChatRoute.normalizedAgentID(cachedDefaultAgentID)
     }
 
+    static func sessionKey(
+        afterSelecting agentID: String,
+        from currentSessionKey: String,
+        routingContract: String?) -> String
+    {
+        guard let normalizedAgentID = WebChatRoute.normalizedAgentID(agentID),
+              let routing = OpenClawChatSessionRoutingContract.parse(routingContract),
+              routing.scope != "global",
+              routing.defaultAgentID == "unowned"
+        else { return currentSessionKey }
+
+        let current = currentSessionKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = current.lowercased()
+        guard !current.isEmpty else { return currentSessionKey }
+
+        if OpenClawChatSessionKey.agentID(from: current) != nil {
+            let parts = current.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count == 3, !parts[2].isEmpty else { return currentSessionKey }
+            return "agent:\(normalizedAgentID):\(parts[2])"
+        }
+
+        guard !lowercased.hasPrefix("agent:"),
+              lowercased != "global",
+              lowercased != "unknown"
+        else { return currentSessionKey }
+
+        let baseKey = lowercased == "main" ? routing.mainKey : current
+        return "agent:\(normalizedAgentID):\(baseKey)"
+    }
+
     private static func makeWindow(
         contentViewController: NSViewController,
         title: String,
@@ -1437,6 +1487,14 @@ final class WebChatSwiftUIWindowController: NSObject, NSWindowDelegate {
 
     var _testRequiresExplicitAgentSelection: Bool {
         self.viewModel.requiresExplicitAgentSelection
+    }
+
+    var _testSessionKey: String {
+        self.viewModel.sessionKey
+    }
+
+    var _testSelectedAgentID: String? {
+        self.agentSelectionRelay.selectedAgentID
     }
 
     func _testSelectAgent(_ agentID: String) {
