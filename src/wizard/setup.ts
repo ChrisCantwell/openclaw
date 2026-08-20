@@ -224,7 +224,6 @@ async function runSetupWizardOnce(
   let importedInferenceVerified = false;
   while (opts.importFrom || flow === "import" || flow.startsWith("import:")) {
     const importFrom = opts.importFrom ?? (flow.startsWith("import:") ? flow.slice(7) : undefined);
-    prompter.disableBackNavigation?.();
     let migrationOutcome: Awaited<ReturnType<typeof runSetupMigrationImport>>;
     try {
       migrationOutcome = await runSetupMigrationImport({

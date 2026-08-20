@@ -334,6 +334,7 @@ export async function runSetupMigrationImport(params: {
             params.baseConfig.agents?.defaults?.workspace ?? onboardHelpers.DEFAULT_WORKSPACE,
         }));
   const workspaceDir = resolveUserPath(workspaceInput.trim() || onboardHelpers.DEFAULT_WORKSPACE);
+  params.prompter.disableBackNavigation?.();
   const stateDir = resolveStateDir();
   return await withSetupMigrationTargetLock(stateDir, async () => {
     const promotionResume = await recoverSetupMigrationPromotion({

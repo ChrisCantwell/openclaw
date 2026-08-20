@@ -43,7 +43,8 @@ not install or modify anything on the remote host.
       with entries such as **Import from Claude**, **Import from Codex**, and
       **Import from Hermes**. Detected sources appear first with their paths;
       other available providers ask for a source path. Explicit import flags
-      dispatch the import directly and skip this menu.
+      dispatch the import directly and skip this menu. Use Back from the
+      provider list to return to **Setup mode** before an import begins.
     - Re-running the wizard does not wipe anything unless you pass `--reset`.
       Reset is a command flag, not a setup-mode choice.
     - `--reset-scope` accepts `config` (config only),

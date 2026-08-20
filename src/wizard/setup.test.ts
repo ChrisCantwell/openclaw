@@ -1579,13 +1579,26 @@ describe("runSetupWizard", () => {
     listSetupMigrationOptions.mockResolvedValueOnce([
       { providerId: "hermes", label: "Import from Hermes" },
     ]);
-    runSetupMigrationImport.mockRejectedValueOnce(error);
+    runSetupMigrationImport.mockImplementationOnce(async ({ prompter: migrationPrompter }) => {
+      await migrationPrompter.select({
+        message: "Migration source",
+        options: [{ value: "hermes", label: "Import from Hermes" }],
+      });
+      throw error;
+    });
     const setupChoices: Array<"import" | "quickstart"> = ["import", "quickstart"];
-    const setupPrompts: WizardSelectParams<unknown>[] = [];
     const select = vi.fn(async (params: WizardSelectParams<unknown>) => {
       if (params.message === "Setup mode") {
-        setupPrompts.push(params);
+        expect(params.options).toEqual([
+          expect.objectContaining({ value: "quickstart", label: "QuickStart (recommended)" }),
+          expect.objectContaining({ value: "advanced", label: "Manual setup" }),
+          expect.objectContaining({ value: "import", label: "Import from another agent" }),
+        ]);
         return setupChoices.shift();
+      }
+      if (params.message === "Migration source") {
+        expect(params.navigation).toMatchObject({ canGoBack: true });
+        return "hermes";
       }
       return "__skip__";
     });
@@ -1608,11 +1621,6 @@ describe("runSetupWizard", () => {
     );
 
     expect(select.mock.calls.filter(([params]) => params.message === "Setup mode")).toHaveLength(2);
-    expect(setupPrompts[0]?.options).toEqual([
-      expect.objectContaining({ value: "quickstart", label: "QuickStart (recommended)" }),
-      expect.objectContaining({ value: "advanced", label: "Manual setup" }),
-      expect.objectContaining({ value: "import", label: "Import from another agent" }),
-    ]);
     expect(runSetupMigrationImport).toHaveBeenCalledOnce();
     expect(prompter.note).toHaveBeenCalledWith(
       expect.stringContaining(detail),
