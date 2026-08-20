@@ -180,7 +180,7 @@ export async function listSetupMigrationOptions(params: {
   for (const detection of params.detections) {
     addOption({
       providerId: detection.providerId,
-      label: detection.label,
+      label: t("wizard.migration.importFrom", { source: detection.label }),
       ...(detection.source || detection.message
         ? { hint: detection.source ?? detection.message }
         : {}),
@@ -189,14 +189,14 @@ export async function listSetupMigrationOptions(params: {
   for (const provider of providers) {
     addOption({
       providerId: provider.id,
-      label: provider.label,
+      label: t("wizard.migration.importFrom", { source: provider.label }),
       hint: provider.description ?? t("wizard.migration.sourcePathHint"),
     });
   }
   for (const provider of resolveManifestSetupMigrationProviders(params.baseConfig)) {
     addOption({
       providerId: provider.providerId,
-      label: provider.label,
+      label: t("wizard.migration.importFrom", { source: provider.label }),
       hint: provider.description ?? t("wizard.migration.sourcePathHint"),
     });
   }
