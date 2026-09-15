@@ -209,7 +209,7 @@ async function prepareHeartbeatDispatchReply(
   // keep suppress + channel-batch gates on the same provenance so a failed or
   // omitted message-tool send cannot fall open to ordinary assistant delivery.
   const messageToolOnlyDelivery =
-    prepared.usesHeartbeatResponseTool === true ||
+    prepared.usesHeartbeatResponseTool ||
     resolveSourceReplyDeliveryMode({
       cfg,
       ctx: { ChatType: delivery.chatType, Provider: delivery.channel },
@@ -431,7 +431,7 @@ async function prepareHeartbeatDispatchReply(
   const selectedDeliveryMeta = selected ? getReplyPayloadMetadata(selected) : undefined;
   const responseToolBlocksChannelDelivery =
     messageToolOnlyDelivery &&
-    !(typeof response?.notify === "boolean" && response.notify === true) &&
+    !(typeof response?.notify === "boolean" && response.notify) &&
     selectedDeliveryMeta?.deliverDespiteSourceReplySuppression !== true &&
     selected?.isError !== true;
   if (
