@@ -340,7 +340,7 @@ export type ReadyHeartbeatWake = StageResult<ReturnType<typeof resolveHeartbeatW
  * Do **not** key solely on `pendingEventEntries.length > 0`. Maintainer feedback
  * welcome on this boundary.
  */
-export function isInternalRoutelessEventWake(params: {
+function isInternalRoutelessEventWake(params: {
   pendingEventEntries: readonly SystemEvent[];
   /** Turn source after stripping internal channels. */
   turnSource: DeliveryContext | undefined;

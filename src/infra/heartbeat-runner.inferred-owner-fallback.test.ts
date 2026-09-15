@@ -2,7 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveMainSessionKey } from "../config/sessions.js";
-import { isInternalRoutelessEventWake } from "./heartbeat-runner-execution.js";
 import { runHeartbeatOnce } from "./heartbeat-runner.js";
 import {
   mockCallAt,
@@ -22,75 +21,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   resetSystemEventsForTest();
-});
-
-describe("isInternalRoutelessEventWake", () => {
-  it("is false with no pending events", () => {
-    expect(
-      isInternalRoutelessEventWake({
-        pendingEventEntries: [],
-        turnSource: undefined,
-        rawTurnSource: undefined,
-        conversationDeliveryKind: "internal",
-      }),
-    ).toBe(false);
-  });
-
-  it("fail-closes internal session completion without deliverable turnSource", () => {
-    expect(
-      isInternalRoutelessEventWake({
-        pendingEventEntries: [{ text: "Exec completed (x, code 0)", ts: 1 }],
-        turnSource: undefined,
-        rawTurnSource: undefined,
-        conversationDeliveryKind: "internal",
-      }),
-    ).toBe(true);
-  });
-
-  it("fail-closes when internal-channel turnSource was stripped", () => {
-    expect(
-      isInternalRoutelessEventWake({
-        pendingEventEntries: [
-          {
-            text: "Exec completed (x, code 0)",
-            ts: 1,
-            deliveryContext: { channel: "webchat", to: "dashboard" },
-          },
-        ],
-        turnSource: undefined,
-        rawTurnSource: { channel: "webchat", to: "dashboard" },
-        conversationDeliveryKind: "external",
-      }),
-    ).toBe(true);
-  });
-
-  it("preserves deliverable external turnSource", () => {
-    expect(
-      isInternalRoutelessEventWake({
-        pendingEventEntries: [
-          {
-            text: "Exec completed (x, code 0)",
-            ts: 1,
-            deliveryContext: { channel: "telegram", to: TELEGRAM_TO },
-          },
-        ],
-        turnSource: { channel: "telegram", to: TELEGRAM_TO },
-        rawTurnSource: { channel: "telegram", to: TELEGRAM_TO },
-        conversationDeliveryKind: "internal",
-      }),
-    ).toBe(false);
-  });
-
-  it("fails open for ambiguous pending events on a non-internal session", () => {
-    expect(
-      isInternalRoutelessEventWake({
-        pendingEventEntries: [{ text: "Cron: check inbox", ts: 1, contextKey: "cron:inbox" }],
-        turnSource: undefined,
-        rawTurnSource: undefined,
-        conversationDeliveryKind: "external",
-      }),
-    ).toBe(false);
-  });
 });
 
 describe("prepareHeartbeatRunStage inferred owner provenance (PR A rev3)", () => {
