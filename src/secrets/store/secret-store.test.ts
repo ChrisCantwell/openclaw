@@ -16,6 +16,7 @@ import {
   consumeGitHubSetupHandoff,
   deleteHiddenGitHubSecretRecord,
   deleteSecretStoreEntry,
+  updateSecretStoreAudience,
   listHiddenGitHubSecretRecordNames,
   listSecretStoreEntries,
   purgeExpiredSecretStoreEntries,
@@ -869,6 +870,43 @@ describe("audience write semantics", () => {
       listSecretStoreEntries({ scope: team, database }).find((e) => e.name === "FRESH_KEY")
         ?.audience,
     ).toBe("selected");
+  });
+
+  it("metadata-only audience edit preserves the stored protected value without re-entry", () => {
+    const database = createDatabaseOptions();
+    writeSecretStoreEntry({
+      scope: team,
+      name: "VAULT_KEY",
+      value: "vault-secret-value",
+      kind: "secret",
+      updatedBy: "test",
+      database,
+    });
+    updateSecretStoreAudience({
+      scope: team,
+      name: "VAULT_KEY",
+      audience: "selected",
+      updatedBy: "test",
+      database,
+    });
+    const entry = listSecretStoreEntries({ scope: team, database }).find(
+      (e) => e.name === "VAULT_KEY",
+    );
+    expect(entry?.audience).toBe("selected");
+    expect(readSecretStoreValue({ scope: team, name: "VAULT_KEY", database })).toEqual({
+      ok: true,
+      value: "vault-secret-value",
+    });
+    // Metadata edits only apply to existing entries.
+    expect(() =>
+      updateSecretStoreAudience({
+        scope: team,
+        name: "MISSING_KEY",
+        audience: "selected",
+        updatedBy: "test",
+        database,
+      }),
+    ).toThrow(/does not exist/);
   });
 });
 

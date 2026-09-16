@@ -80,7 +80,12 @@ export const SecretsStoreListResultSchema = closedObject({
 /** Create or replace one team secret-store entry. */
 export const SecretsStoreSetParamsSchema = closedObject({
   name: SecretStoreMutationNameSchema,
-  value: Type.String({ maxLength: 64 * 1024 }),
+  /**
+   * Omitting value performs a metadata-only update (audience/allowed hosts)
+   * that preserves the stored value of an existing entry; it never creates
+   * one. Secret values never need re-entry to change their audience.
+   */
+  value: Type.Optional(Type.String({ maxLength: 64 * 1024 })),
   kind: Type.Union([Type.Literal("secret"), Type.Literal("env")]),
   audience: Type.Optional(withSince("2026.9", SecretStoreAudienceSchema)),
   allowedHosts: Type.Optional(withSince("2026.8", SecretStoreAllowedHostsSchema)),

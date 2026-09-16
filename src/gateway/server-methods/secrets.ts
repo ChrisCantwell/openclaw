@@ -43,6 +43,7 @@ import {
 } from "../../secrets/store/secret-store-agent-access.js";
 import {
   deleteSecretStoreEntry,
+  updateSecretStoreAudience,
   getSecretStoreEntryMetadata,
   listSecretStoreEntries,
   purgeExpiredSecretStoreEntries,
@@ -167,11 +168,31 @@ export function createSecretStoreWriteService(params: {
   return {
     resolveUpdatedBy: storeUpdatedBy,
     reloadReference,
-    write(input: Omit<Parameters<typeof writeSecretStoreEntry>[0], "scope" | "database">) {
+    write(
+      input: Omit<Parameters<typeof writeSecretStoreEntry>[0], "scope" | "database"> & {
+        /** Omitted value performs a metadata-only update preserving the stored value. */
+        value?: string;
+      },
+    ) {
+      if (input.value === undefined) {
+        if (input.audience === undefined) {
+          throw new SecretStoreValidationError(
+            "SECRET_STORE_VALUE_EMPTY",
+            "A store write must supply a value, or an audience for a metadata-only edit of an existing entry.",
+          );
+        }
+        updateSecretStoreAudience({
+          scope: teamScope,
+          name: input.name,
+          audience: input.audience,
+          updatedBy: input.updatedBy,
+        });
+        return;
+      }
       // Registration precedes validation and SQLite so even write failures
       // cannot disclose the submitted credential through downstream logging.
       registerSecretValueForRedaction(input.value);
-      writeSecretStoreEntry({ scope: teamScope, ...input });
+      writeSecretStoreEntry({ scope: teamScope, ...input, value: input.value });
     },
   };
 }
@@ -628,10 +649,21 @@ export function createSecretsHandlers(params: {
       let saved = false;
       try {
         holdGatewayPolicyResponse(respond);
+        if (requestParams.value === undefined && requestParams.audience === undefined) {
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              "secrets.store.set requires a value, or an audience for a metadata-only audience edit of an existing entry.",
+            ),
+          );
+          return;
+        }
         params.storeWriteService.write({
           name: requestParams.name,
-          value: requestParams.value,
           kind: requestParams.kind,
+          ...(requestParams.value !== undefined ? { value: requestParams.value } : {}),
           ...(requestParams.audience !== undefined ? { audience: requestParams.audience } : {}),
           ...(requestParams.allowedHosts !== undefined
             ? { allowedHosts: requestParams.allowedHosts }

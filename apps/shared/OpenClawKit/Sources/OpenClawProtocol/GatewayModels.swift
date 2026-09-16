@@ -13032,14 +13032,14 @@ public struct SecretsStoreMutationResult: Codable, Sendable {
 
 public struct SecretsStoreSetParams: Codable, Sendable {
     public let name: String
-    public let value: String
+    public let value: String?
     public let kind: AnyCodable
     public let audience: AnyCodable?
     public let allowedhosts: [String]?
 
     public init(
         name: String,
-        value: String,
+        value: String? = nil,
         kind: AnyCodable,
         audience: AnyCodable? = nil,
         allowedhosts: [String]? = nil)

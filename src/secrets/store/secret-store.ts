@@ -459,6 +459,54 @@ export function writeSecretStoreEntryWithRollback(params: SecretStoreWriteParams
   };
 }
 
+/**
+ * Metadata-only audience edit for an existing entry: preserves the stored
+ * value and kind, so protected credentials never need re-entry to change
+ * their audience. Refuses when the entry is missing or deleted.
+ */
+export function updateSecretStoreAudience(params: {
+  scope: SecretStoreScope;
+  name: string;
+  audience: SecretStoreAudience;
+  updatedBy: string | null;
+  database?: OpenClawStateDatabaseOptions;
+}): void {
+  assertSecretStoreEnvName(params.name);
+  const audience = isSecretStoreAudience(params.audience)
+    ? params.audience
+    : normalizeSecretStoreAudience(params.audience);
+  const { scopeKind, scopeId } = normalizeScope(params.scope);
+  const now = Date.now();
+  runOpenClawStateWriteTransaction(
+    ({ db: sqlite }) => {
+      ensureSecretStoreSchema(sqlite);
+      const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
+      const updated = executeSqliteQuerySync(
+        sqlite,
+        db
+          .updateTable("secret_store_entries")
+          .set({
+            audience,
+            updated_at_ms: now,
+            updated_by: params.updatedBy,
+          })
+          .where("scope_kind", "=", scopeKind)
+          .where("scope_id", "=", scopeId)
+          .where("name", "=", params.name)
+          .where("deleted_at_ms", "is", null),
+      );
+      if (Number(updated.numAffectedRows ?? 0n) !== 1) {
+        throw new SecretStoreValidationError(
+          "SECRET_STORE_INVALID_NAME",
+          `Secret store entry "${params.name}" does not exist; audience edits only apply to existing entries.`,
+        );
+      }
+    },
+    params.database,
+    { operationLabel: "secrets.store.audience" },
+  );
+}
+
 export function updateSecretStoreAllowedHosts(params: {
   scope: SecretStoreScope;
   name: string;
