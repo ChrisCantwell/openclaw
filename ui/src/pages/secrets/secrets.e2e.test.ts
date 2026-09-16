@@ -32,6 +32,7 @@ const envEntry: SecretStoreEntry = {
   value: "https://service.test",
   scopeKind: "team",
   scopeId: "",
+  audience: "all",
   createdAtMs: 1_786_352_400_000,
   updatedAtMs: 1_786_352_400_000,
   updatedBy: "E2E Operator",
@@ -42,6 +43,7 @@ const secretEntry: SecretStoreEntry = {
   kind: "secret",
   scopeKind: "team",
   scopeId: "",
+  audience: "all",
   createdAtMs: 1_786_352_400_000,
   updatedAtMs: 1_786_352_400_000,
   updatedBy: "E2E Operator",
@@ -151,7 +153,7 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}settings/secrets`);
         const row = page.getByRole("row", { name: longNameSecretEntry.name });
         const name = row.locator(".secrets-store__name");
-        const access = row.locator(".secrets-store__mode");
+        const access = row.locator(".secrets-store__mode--secret");
 
         expect(await name.getAttribute("title")).toBe(longNameSecretEntry.name);
         const layout = await Promise.all([name.boundingBox(), access.boundingBox()]);
@@ -316,10 +318,20 @@ suite.define(() => {
 
       expect(await gateway.getRequests("secrets.store.set")).toEqual([
         expect.objectContaining({
-          params: expect.objectContaining({ name: "EMPTY_ENV", value: "", kind: "env" }),
+          params: expect.objectContaining({
+            name: "EMPTY_ENV",
+            value: "",
+            kind: "env",
+            audience: "all",
+          }),
         }),
         expect.objectContaining({
-          params: { name: "EMPTY_BULK_ENV", value: "", kind: "env" },
+          params: expect.objectContaining({
+            name: "EMPTY_BULK_ENV",
+            value: "",
+            kind: "env",
+            audience: "all",
+          }),
         }),
       ]);
     });

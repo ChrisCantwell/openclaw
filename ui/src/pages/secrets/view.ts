@@ -44,6 +44,7 @@ type SecretsStoreViewProps = {
   onDraftValueChange: (value: string) => void;
   onDraftAllowedHostsChange: (allowedHosts: string) => void;
   onDraftKindChange: (kind: "secret" | "env") => void;
+  onDraftAudienceChange: (audience: "all" | "selected") => void;
   onSubmitDraft: () => void;
   onOpenBulk: () => void;
   onCloseBulk: () => void;
@@ -51,16 +52,223 @@ type SecretsStoreViewProps = {
   onBulkAutoDetectChange: (enabled: boolean) => void;
   onSubmitBulk: () => void;
   onDelete: (entry: SecretStoreEntry) => void;
+  canAdminAssignments: boolean;
+  assignments: Array<{ agentId: string; names: string[] }>;
+  assignmentsNextCursor: string | null;
+  assignmentsLoading: boolean;
+  assignmentsBusy: boolean;
+  assignmentsError: string | null;
+  /** Configured agents from the roster; the dropdown lists these first. */
+  assignmentRosterAgentIds: string[];
+  /**
+   * Legacy/deleted agent ids still present in assignment groups; merged after
+   * the roster so existing assignments remain selectable and operable.
+   */
+  assignmentLegacyAgentIds: string[];
+  assignmentStoreNames: string[];
+  assignmentAgent: string;
+  assignmentName: string;
+  assignmentNotice: string | null;
+  enforcementMode: "off" | "advisory" | "enforce";
+  enforcementBusy: boolean;
+  enforcementNotice: string | null;
+  enforcementErrorNotice: string | null;
+  onAssignmentAgentChange: (agent: string) => void;
+  onAssignmentNameChange: (name: string) => void;
+  onSubmitAssign: () => void;
+  onUnassign: (agentId: string, name: string) => void;
+  onLoadMoreAssignments: () => void;
+  onEnforcementChange: (mode: "off" | "advisory" | "enforce") => void;
 };
 
 const DOCS_URL = "https://docs.openclaw.ai/gateway/secrets#shared-secret-store";
 const SECRET_MASK = "••••••••";
 
 function updatedLabel(entry: SecretStoreEntry): string {
-  const relative = formatRelativeTimestamp(entry.updatedAtMs, { fallback: t("common.unknown") });
+  const relative = formatRelativeTimestamp(entry.updatedAtMs, {
+    fallback: t("common.unknown"),
+  });
   return entry.updatedBy
     ? t("secretsStore.by", { time: relative, name: entry.updatedBy })
     : relative;
+}
+
+/** Operator-admin agent-assignment and enforcement panel; never model-visible. */
+function renderAssignments(props: SecretsStoreViewProps): TemplateResult | typeof nothing {
+  if (!props.canAdminAssignments) {
+    return nothing;
+  }
+  return html`
+    ${renderSettingsSection(
+      { title: t("secretsAssignments.title") },
+      html`
+        <p class="secrets-store__hint">${t("secretsAssignments.hint")}</p>
+        ${
+          props.assignmentsError
+            ? html`<div class="callout danger" role="alert">${props.assignmentsError}</div>`
+            : nothing
+        }
+        ${
+          props.enforcementErrorNotice
+            ? html`<div class="callout danger" role="alert">${props.enforcementErrorNotice}</div>`
+            : nothing
+        }
+        ${
+          props.enforcementNotice
+            ? html`<div
+                class="callout success secrets-store__message"
+                role="status"
+                aria-live="polite"
+              >
+                ${props.enforcementNotice}
+              </div>`
+            : nothing
+        }
+        ${
+          props.assignmentNotice
+            ? html`<div
+                class="callout success secrets-store__message"
+                role="status"
+                aria-live="polite"
+              >
+                ${props.assignmentNotice}
+              </div>`
+            : nothing
+        }
+        <div class="secrets-store-assignments">
+          <div class="secrets-store-assignments__controls">
+            <label class="secrets-store-field">
+              <span>${t("secretsAssignments.agent")}</span>
+              <select
+                class="settings-input mono"
+                ?disabled=${props.assignmentsBusy}
+                .value=${props.assignmentAgent}
+                @change=${(event: Event) =>
+                  props.onAssignmentAgentChange((event.currentTarget as HTMLSelectElement).value)}
+              >
+                <option value="" ?selected=${props.assignmentAgent === ""}>
+                  ${t("secretsAssignments.agentDefaultOption")}
+                </option>
+                ${props.assignmentRosterAgentIds.map(
+                  (agentId) =>
+                    html`<option value=${agentId} ?selected=${props.assignmentAgent === agentId}>
+                      ${agentId}
+                    </option>`,
+                )}
+                ${props.assignmentLegacyAgentIds
+                  .filter((agentId) => !props.assignmentRosterAgentIds.includes(agentId))
+                  .map(
+                    (agentId) =>
+                      html`<option value=${agentId} ?selected=${props.assignmentAgent === agentId}>
+                        ${agentId}
+                      </option>`,
+                  )}
+              </select>
+            </label>
+            <label class="secrets-store-field">
+              <span>${t("secretsAssignments.secretName")}</span>
+              <input
+                class="settings-input mono"
+                list="secrets-assignment-names"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder=${t("secretsAssignments.secretNamePlaceholder")}
+                ?disabled=${props.assignmentsBusy}
+                .value=${props.assignmentName}
+                @input=${(event: Event) =>
+                  props.onAssignmentNameChange((event.currentTarget as HTMLInputElement).value)}
+              />
+              <datalist id="secrets-assignment-names">
+                ${props.assignmentStoreNames.map((name) => html`<option value=${name}></option>`)}
+              </datalist>
+            </label>
+            <button
+              class="btn btn--sm primary"
+              type="button"
+              ?disabled=${props.assignmentsBusy || !props.assignmentAgent.trim() || !props.assignmentName.trim()}
+              @click=${props.onSubmitAssign}
+            >
+              ${t("secretsAssignments.assign")}
+            </button>
+          </div>
+          ${
+            props.assignments.length
+              ? html`
+                  <table class="secrets-store__table settings-table--stacked" role="table">
+                    <tbody>
+                      ${props.assignments.map((group) =>
+                        group.names.map(
+                          (name) => html`
+                            <tr tabindex="0" aria-label=${`${name} → ${group.agentId}`}>
+                              <td data-label=${t("secretsAssignments.agent")}>
+                                <code class="secrets-store__name">${group.agentId}</code>
+                              </td>
+                              <td data-label=${t("secretsAssignments.secretName")}>
+                                <code class="secrets-store__name">${name}</code>
+                              </td>
+                              <td data-label=${t("secretsStore.actions")}>
+                                <button
+                                  class="btn btn--sm"
+                                  type="button"
+                                  ?disabled=${props.assignmentsBusy}
+                                  @click=${() => props.onUnassign(group.agentId, name)}
+                                >
+                                  ${t("secretsAssignments.unassign")}
+                                </button>
+                              </td>
+                            </tr>
+                          `,
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                `
+              : html`<p>${t("secretsAssignments.none")}</p>`
+          }
+          ${
+            props.assignmentsNextCursor
+              ? html`
+                  <button
+                    class="btn btn--sm"
+                    type="button"
+                    ?disabled=${props.assignmentsLoading || props.assignmentsBusy}
+                    @click=${props.onLoadMoreAssignments}
+                  >
+                    ${t("secretsAssignments.loadMore")}
+                  </button>
+                `
+              : nothing
+          }
+          <fieldset class="secrets-store-modes">
+            <legend>${t("secretsAssignments.enforcementTitle")}</legend>
+            <small>${t("secretsAssignments.enforcementHint")}</small>
+            ${(["off", "advisory", "enforce"] as const).map(
+              (mode) => html`
+                <label
+                  class="secrets-store-mode ${
+                    props.enforcementMode === mode ? "secrets-store-mode--selected" : ""
+                  }"
+                >
+                  <input
+                    type="radio"
+                    name="assignment-enforcement"
+                    value=${mode}
+                    .checked=${props.enforcementMode === mode}
+                    ?disabled=${props.enforcementBusy || props.enforcementMode === mode}
+                    @change=${() => props.onEnforcementChange(mode)}
+                  />
+                  <span>
+                    <strong>${t(`secretsAssignments.mode.${mode}`)}</strong>
+                    <small>${t(`secretsAssignments.modeHint.${mode}`)}</small>
+                  </span>
+                </label>
+              `,
+            )}
+          </fieldset>
+        </div>
+      `,
+    )}
+  `;
 }
 
 function renderEntryMenu(props: SecretsStoreViewProps, entry: SecretStoreEntry): TemplateResult {
@@ -149,6 +357,13 @@ function renderTable(props: SecretsStoreViewProps): TemplateResult {
                       entry.kind === "secret"
                         ? "secretsStore.protectedSecret"
                         : "secretsStore.agentReadable",
+                    )}</span
+                  >
+                  <span class="secrets-store__mode secrets-store__mode--audience"
+                    >${t(
+                      (entry.audience ?? "all") === "selected"
+                        ? "secretsStore.audienceSelected"
+                        : "secretsStore.audienceAll",
                     )}</span
                   >
                 </td>
@@ -281,6 +496,45 @@ function renderEntryDialog(props: SecretsStoreViewProps): TemplateResult | typeo
             <span>
               <strong>${t("secretsStore.agentReadable")}</strong>
               <small>${t("secretsStore.agentReadableHint")}</small>
+            </span>
+          </label>
+        </fieldset>
+        <fieldset class="secrets-store-modes">
+          <legend>${t("secretsStore.agentAccess")}</legend>
+          <label
+            class="secrets-store-mode ${
+              props.draft.audience === "all" ? "secrets-store-mode--selected" : ""
+            }"
+          >
+            <input
+              type="radio"
+              name="agent-access"
+              value="all"
+              .checked=${props.draft.audience === "all"}
+              ?disabled=${props.busy}
+              @change=${() => props.onDraftAudienceChange("all")}
+            />
+            <span>
+              <strong>${t("secretsStore.audienceAll")}</strong>
+              <small>${t("secretsStore.audienceHint")}</small>
+            </span>
+          </label>
+          <label
+            class="secrets-store-mode ${
+              props.draft.audience === "selected" ? "secrets-store-mode--selected" : ""
+            }"
+          >
+            <input
+              type="radio"
+              name="agent-access"
+              value="selected"
+              .checked=${props.draft.audience === "selected"}
+              ?disabled=${props.busy}
+              @change=${() => props.onDraftAudienceChange("selected")}
+            />
+            <span>
+              <strong>${t("secretsStore.audienceSelected")}</strong>
+              <small>${t("secretsStore.selectedAgentsHint")}</small>
             </span>
           </label>
         </fieldset>
@@ -459,6 +713,7 @@ export function renderSecretsStore(props: SecretsStoreViewProps): TemplateResult
           },
           renderTable(props),
         )}
+        ${renderAssignments(props)}
       `,
       { wide: true },
     )}

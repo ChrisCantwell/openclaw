@@ -55,7 +55,7 @@ reason. For egress use, it proposes the exact destination hosts too.
   returned in any mode; they are redacted from text and structured output.
 - `delete` — soft-delete an entry by name. Deleted entries are purged after 30
   days. Refused while assignment policy is active (`advisory` or `enforce`);
-  operators delete via the CLI.
+  operators delete via the CLI or Control UI.
 
 There is deliberately no action that writes a value the agent supplies. If a
 value must enter the store, it arrives through the human prompt, the
@@ -63,8 +63,9 @@ value must enter the store, it arrives through the human prompt, the
 
 A `request` stores the entry but does not assign it to the requesting agent.
 While assignment enforcement is active, an operator must assign the name before
-that agent's exec runs can receive it. Use `openclaw secrets assign`; a linked
-Control UI follow-up will add equivalent assignment and enforcement controls.
+that agent's exec runs can receive it. The primary assignment path is the web
+Control UI, Settings → Secrets (agent-assignment and enforcement panel); the
+`openclaw secrets assign` CLI remains an equivalent fallback.
 
 This tool's authorization is OpenClaw-level defense in depth over the supported
 secret paths. It is not OS isolation: an unsandboxed agent with same-user host

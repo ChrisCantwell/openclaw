@@ -14,6 +14,8 @@ export type SecretsStoreDraft = {
   name: string;
   value: string;
   kind: "secret" | "env";
+  /** Agent access axis, independent from value protection (kind). */
+  audience: "all" | "selected";
   allowedHosts: string;
 };
 
@@ -118,6 +120,7 @@ export function setSecretsStoreEntry(
       name: draft.name,
       value: draft.value,
       kind: draft.kind,
+      audience: draft.audience,
       ...(draft.kind === "secret"
         ? {
             allowedHosts: draft.allowedHosts
@@ -149,6 +152,8 @@ export function parseSecretsStoreBulkInput(
     name,
     value,
     kind: autoDetectSecrets && isSensitiveEnvName(name) ? "secret" : "env",
+    // Bulk import keeps legacy team-wide delivery; audiences are edited per entry.
+    audience: "all" as const,
   }));
   return { entries, invalidNames };
 }

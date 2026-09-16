@@ -63,9 +63,10 @@ and fails closed when the agent has no valid identity or no assignments, while
 under `advisory` every team entry still projects and each unassigned entry is
 logged as a warning. SecretRef resolution and the existing egress destination
 policy remain authoritative at use time.
-A linked Control UI follow-up will expose the same assign/unassign and
-enforcement-mode administration for authenticated operators (`operator.admin`).
-Until then, this CLI is the supported administration surface.
+The Control UI Settings → Secrets page provides the same assign/unassign and
+enforcement-mode administration for authenticated operators (operator.admin),
+with a confirmation warning before switching to `enforce`; this CLI remains an
+equivalent fallback.
 
 ## Shared secret store
 

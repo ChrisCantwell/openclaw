@@ -77,13 +77,13 @@ The automatic agent exec store snapshot honors this audience with
   supported-path OpenClaw authorization and defense in depth, not OS
   isolation.
 
-A linked Control UI follow-up will await durable config persistence and then
-confirm the mode against the live runtime source with a bounded,
-condition-based wait before reporting success. If that wait expires without
-observing the expected mode, the UI will report failure with the authoritative
-post-attempt mode in a separate error callout, never as a success notice. A
-timeout will not imply rollback: the persist may still have landed, and the
-error callout's mode will be the source of truth.
+The Control UI enforcement switch awaits a durable config persist and then
+confirms the mode against the live runtime source with a bounded,
+condition-based wait before reporting success. If the wait expires without
+observing the expected mode (about five seconds), the switch reports failure
+with the authoritative post-attempt mode in a separate error callout, never
+as a success notice. A timeout is not a rollback: the persist may still have
+landed, and the error callout's mode is the source of truth.
 
 Agent identity is derived from authenticated runtime context inside the exec
 tool; it cannot be selected through model or tool arguments. Operator config
@@ -112,9 +112,14 @@ listing. Under any policy, a selected-audience entry the agent is not
 assigned does not project into its exec environment; operators assign the
 name or widen the entry to `all` explicitly.
 Model-facing `delete` is refused while any assignment policy is active;
-operators use the CLI. A linked Control UI follow-up will expose assignment
-and enforcement administration without changing these backend boundaries.
-The operator-admin assignment RPCs (`secrets.assignments.admin.*`,
+operators use the CLI or Control UI. The Control UI Settings → Secrets page
+manages the store, agent assignments, and the off/advisory/enforce mode for
+authenticated operators (operator.admin scope), with a confirmation warning
+before switching to `enforce`; the CLI remains an equivalent fallback. The
+page edits each entry's two independent axes separately: **Value protection**
+(Protected secret vs Agent-readable environment value) and **Agent access**
+(All agents vs Selected agents, with the assignment picker shown only for
+selected-audience entries). The operator-admin assignment RPCs (`secrets.assignments.admin.*`,
 `secrets.assignments.enforcement.*`) take explicit agent ids, never derive
 identity from runtime context, and carry no secret values; the model-facing
 self-only RPCs are unchanged.

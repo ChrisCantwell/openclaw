@@ -4942,6 +4942,14 @@ export const en: TranslationMap & {
     hint: "Choose protected, write-only secrets or intentionally agent-readable Gateway environment values.",
     required: "Enter a value.",
     detect: "Protect credential-like names automatically",
+    agentAccess: "Agent access",
+    audienceAll: "All agents",
+    audienceSelected: "Selected agents",
+    audienceHint:
+      "Independent from value protection. All agents keeps legacy team-wide delivery; Selected agents restricts delivery to explicitly assigned agents.",
+    selectedAgentsHint:
+      "Only assigned agents receive this entry. Assign it in Agent secret assignments, or pick agents here.",
+    audienceSaved: "Saved {name} with agent access: {audience}.",
     detected: "{count} protected secrets detected",
     detectedOne: "{count} protected secret detected",
     unavail: "Gateway/admin required.",
@@ -4958,6 +4966,37 @@ export const en: TranslationMap & {
     confirmDelete: "Delete {name}?",
     deleted: "Deleted {name}.",
     deleteFailed: "The secret was not deleted. Reload the list and try again.",
+  },
+  secretsAssignments: {
+    title: "Agent secret assignments",
+    hint: "Assign shared secret names to agents. Subagent sessions inherit their owning agent's assignments. Assignment controls who may receive each entry; it never grants secret values to any human or model surface.",
+    agent: "Agent ID",
+    agentDefaultOption: "Select an agent…",
+    secretName: "Secret name",
+    secretNamePlaceholder: "SERVICE_API_KEY",
+    assign: "Assign",
+    unassign: "Unassign",
+    loadMore: "Load more",
+    none: "No agent secret assignments.",
+    assigned: "Assigned {name} to agent {agentId}.",
+    unassigned: "Removed assignment {name} from agent {agentId}.",
+    confirmUnassign: "Remove assignment {name} from agent {agentId}?",
+    failed: "The assignment change failed. Reload and try again.",
+    enforcementTitle: "Exec snapshot enforcement",
+    enforcementHint:
+      "Controls which team-store entries an agent exec run receives. Subagent sessions use their owning agent's identity. A same-user unsandboxed agent can still read host state directly: this is OpenClaw authorization, not OS isolation.",
+    enforceTitle: "Enable enforce mode?",
+    enforceWarning:
+      "Enforce mode fails closed: agents without a valid identity or without assignments immediately receive no store entries (including entries requested and stored but never assigned). Advisory is the warn-only soak mode.",
+    enforceConfirm: "Enable enforce",
+    enforcementSet: "Agent assignment enforcement set to {mode}.",
+    mode: { off: "Off", advisory: "Advisory", enforce: "Enforce" },
+    modeHint: {
+      off: "Legacy: every agent exec run receives all team-store entries.",
+      advisory: "Warn-only soak: everything is delivered; each unassigned entry logs a warning.",
+      enforce:
+        "Fail closed: only assigned entries project; missing or invalid agent identity receives nothing.",
+    },
   },
   cron: {
     adminRequired: "Browsing only. Automation changes require operator.admin access.",

@@ -20,9 +20,14 @@ describe("secrets store state", () => {
     );
     expect(parsed).toEqual({
       entries: [
-        { name: "SERVICE_URL", value: "https://service.test?a=b", kind: "env" },
-        { name: "SERVICE_API_KEY", value: "line one\nline two", kind: "secret" },
-        { name: "PLAIN", value: "value", kind: "env" },
+        { name: "SERVICE_URL", value: "https://service.test?a=b", kind: "env", audience: "all" },
+        {
+          name: "SERVICE_API_KEY",
+          value: "line one\nline two",
+          kind: "secret",
+          audience: "all",
+        },
+        { name: "PLAIN", value: "value", kind: "env", audience: "all" },
       ],
       invalidNames: [],
     });

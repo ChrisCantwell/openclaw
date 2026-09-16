@@ -202,6 +202,19 @@ For static credentials, runtime no longer depends on plaintext legacy auth stora
 
 ## Control UI
 
-Open **Settings → Secrets** to list, add, edit, bulk-import, or soft-delete team-scoped entries. Choose **Protected secret** for write-only values used by SecretRefs or destination-bound Gateway egress. Choose **Agent-readable environment** only when Gateway-hosted agent commands must receive plaintext and the agent may print, transmit, or persist it. Bulk Add accepts dotenv `NAME=VALUE` assignments, including quoted multiline values. **Protect credential-like names automatically** defaults credential-shaped names to protected mode.
+Open **Settings → Secrets** to list, add, edit, bulk-import, or soft-delete team-scoped entries.
 
-This store page manages values only. Configure the corresponding `store` SecretRef on a supported field through its settings form or the raw editor. Identity-scoped entries are reserved for a later release and are not exposed by this page.
+This store page manages each entry's two independent axes separately:
+
+- **Value protection** — Protected secret (write-only, SecretRefs and
+  Gateway egress) vs Agent-readable environment (plaintext delivery to
+  Gateway-hosted agent commands).
+- **Agent access** — All agents (legacy team-wide delivery, the default) vs
+  Selected agents (delivery restricted to explicitly assigned agents; the
+  searchable agent picker appears only for selected entries). A selected
+  entry with an empty assignment set is readable by no agent — an empty set
+  never means global access.
+
+Choose **Protected secret** for write-only values used by SecretRefs or destination-bound Gateway egress. Choose **Agent-readable environment** only when Gateway-hosted agent commands must receive plaintext and the agent may print, transmit, or persist it. Bulk Add accepts dotenv `NAME=VALUE` assignments, including quoted multiline values. **Protect credential-like names automatically** defaults credential-shaped names to protected mode. Identity-scoped entries are reserved for a later release and are not exposed by this page.
+
+The store page manages values and audiences only. Configure the corresponding `store` SecretRef on a supported field through its settings form or the raw editor.
