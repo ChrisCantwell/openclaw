@@ -4987,15 +4987,16 @@ export const en: TranslationMap & {
       "Controls which team-store entries an agent exec run receives. Subagent sessions use their owning agent's identity. A same-user unsandboxed agent can still read host state directly: this is OpenClaw authorization, not OS isolation.",
     enforceTitle: "Enable enforce mode?",
     enforceWarning:
-      "Enforce mode fails closed: agents without a valid identity or without assignments immediately receive no store entries (including entries requested and stored but never assigned). Advisory is the warn-only soak mode.",
+      "Enforce mode fails closed: an exec run without a valid agent identity receives no store entries, and selected-audience entries reach only their assigned agents. All-audience entries keep shared delivery in every mode, including enforce. Advisory warns while applying the same withholding.",
     enforceConfirm: "Enable enforce",
     enforcementSet: "Agent assignment enforcement set to {mode}.",
     mode: { off: "Off", advisory: "Advisory", enforce: "Enforce" },
     modeHint: {
-      off: "Legacy: every agent exec run receives all team-store entries.",
-      advisory: "Warn-only soak: everything is delivered; each unassigned entry logs a warning.",
+      off: "All-audience entries reach every agent exec run; selected-audience entries stay withheld from unassigned agents.",
+      advisory:
+        "Same withholding as off: selected-audience entries stay withheld from unassigned agents, with a warning logged for each withheld entry.",
       enforce:
-        "Fail closed: only assigned entries project; missing or invalid agent identity receives nothing.",
+        "Fail closed: a missing or invalid agent identity receives nothing; all-audience entries stay shared, and selected-audience entries reach only their assigned agents.",
     },
   },
   cron: {
