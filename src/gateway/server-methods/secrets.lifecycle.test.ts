@@ -87,6 +87,10 @@ describe("secret store mutation lifecycle", () => {
           reloadSecrets,
           resolveSecrets,
           storeWriteService: createSecretStoreWriteService({ reloadSecrets }),
+          configAccess: {
+            readAgentAssignmentEnforcement: () => "off",
+            writeAgentAssignmentEnforcement: async () => {},
+          },
           log: {
             debug: () => {
               if (closure === "mutation logging") {
@@ -146,7 +150,15 @@ describe("secret store mutation lifecycle", () => {
       const storeWriteService = createSecretStoreWriteService({ reloadSecrets });
       const handlers = {
         ...createQuestionHandlers(manager, storeWriteService),
-        ...createSecretsHandlers({ reloadSecrets, resolveSecrets, storeWriteService }),
+        ...createSecretsHandlers({
+          reloadSecrets,
+          resolveSecrets,
+          storeWriteService,
+          configAccess: {
+            readAgentAssignmentEnforcement: () => "off",
+            writeAgentAssignmentEnforcement: async () => {},
+          },
+        }),
       };
       const methods: string[] = [];
       try {
@@ -264,6 +276,10 @@ describe("secret store mutation lifecycle", () => {
           reloadSecrets,
           resolveSecrets,
           storeWriteService: createSecretStoreWriteService({ reloadSecrets }),
+          configAccess: {
+            readAgentAssignmentEnforcement: () => "off",
+            writeAgentAssignmentEnforcement: async () => {},
+          },
         });
         for (const value of ["test-secret-created", "test-secret-rotated"]) {
           expect(

@@ -12371,13 +12371,13 @@ public struct Question: Codable, Sendable {
 }
 
 public struct QuestionSecretStoreBinding: Codable, Sendable {
-    public let name: String
+    public let name: SecretStoreName
     public let kind: AnyCodable
     public let allowedhosts: [String]?
     public let reason: String?
 
     public init(
-        name: String,
+        name: SecretStoreName,
         kind: AnyCodable,
         allowedhosts: [String]? = nil,
         reason: String? = nil)
@@ -12640,9 +12640,10 @@ public struct ScopeUpgradeWait: Codable, Sendable {
 }
 
 public struct SecretStoreEnvEntry: Codable, Sendable {
-    public let name: String
+    public let name: SecretStoreName
     public let scopekind: String
     public let scopeid: String
+    public let audience: AnyCodable
     public let createdatms: Int
     public let updatedatms: Int
     public let updatedby: String?
@@ -12650,9 +12651,10 @@ public struct SecretStoreEnvEntry: Codable, Sendable {
     public let value: String
 
     public init(
-        name: String,
+        name: SecretStoreName,
         scopekind: String,
         scopeid: String,
+        audience: AnyCodable,
         createdatms: Int,
         updatedatms: Int,
         updatedby: String? = nil,
@@ -12662,6 +12664,7 @@ public struct SecretStoreEnvEntry: Codable, Sendable {
         self.name = name
         self.scopekind = scopekind
         self.scopeid = scopeid
+        self.audience = audience
         self.createdatms = createdatms
         self.updatedatms = updatedatms
         self.updatedby = updatedby
@@ -12673,6 +12676,7 @@ public struct SecretStoreEnvEntry: Codable, Sendable {
         case name
         case scopekind = "scopeKind"
         case scopeid = "scopeId"
+        case audience
         case createdatms = "createdAtMs"
         case updatedatms = "updatedAtMs"
         case updatedby = "updatedBy"
@@ -12682,9 +12686,10 @@ public struct SecretStoreEnvEntry: Codable, Sendable {
 }
 
 public struct SecretStoreSecretEntry: Codable, Sendable {
-    public let name: String
+    public let name: SecretStoreName
     public let scopekind: String
     public let scopeid: String
+    public let audience: AnyCodable
     public let createdatms: Int
     public let updatedatms: Int
     public let updatedby: String?
@@ -12692,9 +12697,10 @@ public struct SecretStoreSecretEntry: Codable, Sendable {
     public let allowedhosts: [String]?
 
     public init(
-        name: String,
+        name: SecretStoreName,
         scopekind: String,
         scopeid: String,
+        audience: AnyCodable,
         createdatms: Int,
         updatedatms: Int,
         updatedby: String? = nil,
@@ -12704,6 +12710,7 @@ public struct SecretStoreSecretEntry: Codable, Sendable {
         self.name = name
         self.scopekind = scopekind
         self.scopeid = scopeid
+        self.audience = audience
         self.createdatms = createdatms
         self.updatedatms = updatedatms
         self.updatedby = updatedby
@@ -12715,11 +12722,183 @@ public struct SecretStoreSecretEntry: Codable, Sendable {
         case name
         case scopekind = "scopeKind"
         case scopeid = "scopeId"
+        case audience
         case createdatms = "createdAtMs"
         case updatedatms = "updatedAtMs"
         case updatedby = "updatedBy"
         case kind
         case allowedhosts = "allowedHosts"
+    }
+}
+
+public struct SecretsAssignmentsAdminAssignParams: Codable, Sendable {
+    public let agentid: String
+    public let name: SecretStoreName
+    public let providerhint: String?
+
+    public init(
+        agentid: String,
+        name: SecretStoreName,
+        providerhint: String? = nil)
+    {
+        self.agentid = agentid
+        self.name = name
+        self.providerhint = providerhint
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case agentid = "agentId"
+        case name
+        case providerhint = "providerHint"
+    }
+}
+
+public struct SecretsAssignmentsAdminListParams: Codable, Sendable {
+    public let cursor: String?
+
+    public init(
+        cursor: String? = nil)
+    {
+        self.cursor = cursor
+    }
+}
+
+public struct SecretsAssignmentsAdminListResult: Codable, Sendable {
+    public let assignments: [[String: AnyCodable]]
+    public let nextcursor: String?
+
+    public init(
+        assignments: [[String: AnyCodable]],
+        nextcursor: String? = nil)
+    {
+        self.assignments = assignments
+        self.nextcursor = nextcursor
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case assignments
+        case nextcursor = "nextCursor"
+    }
+}
+
+public struct SecretsAssignmentsAdminMutationResult: Codable, Sendable {
+    public let ok: Bool
+
+    public init(
+        ok: Bool)
+    {
+        self.ok = ok
+    }
+}
+
+public struct SecretsAssignmentsAdminUnassignParams: Codable, Sendable {
+    public let agentid: String
+    public let name: SecretStoreName
+
+    public init(
+        agentid: String,
+        name: SecretStoreName)
+    {
+        self.agentid = agentid
+        self.name = name
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case agentid = "agentId"
+        case name
+    }
+}
+
+public struct SecretsAssignmentsEnforcementGetParams: Codable, Sendable {}
+
+public struct SecretsAssignmentsEnforcementGetResult: Codable, Sendable {
+    public let mode: AnyCodable
+
+    public init(
+        mode: AnyCodable)
+    {
+        self.mode = mode
+    }
+}
+
+public struct SecretsAssignmentsEnforcementSetParams: Codable, Sendable {
+    public let mode: AnyCodable
+
+    public init(
+        mode: AnyCodable)
+    {
+        self.mode = mode
+    }
+}
+
+public struct SecretsAssignmentsEnforcementSetResult: Codable, Sendable {
+    public let ok: Bool
+    public let mode: AnyCodable
+
+    public init(
+        ok: Bool,
+        mode: AnyCodable)
+    {
+        self.ok = ok
+        self.mode = mode
+    }
+}
+
+public struct SecretsAssignmentsEntryParams: Codable, Sendable {
+    public let name: SecretStoreName
+
+    public init(
+        name: SecretStoreName)
+    {
+        self.name = name
+    }
+}
+
+public struct SecretsAssignmentsEntryResult: Codable, Sendable {
+    public let entry: AnyCodable
+
+    public init(
+        entry: AnyCodable)
+    {
+        self.entry = entry
+    }
+}
+
+public struct SecretsAssignmentsHasParams: Codable, Sendable {
+    public let name: SecretStoreName
+
+    public init(
+        name: SecretStoreName)
+    {
+        self.name = name
+    }
+}
+
+public struct SecretsAssignmentsHasResult: Codable, Sendable {
+    public let assigned: Bool
+
+    public init(
+        assigned: Bool)
+    {
+        self.assigned = assigned
+    }
+}
+
+public struct SecretsAssignmentsListParams: Codable, Sendable {}
+
+public struct SecretsAssignmentsListResult: Codable, Sendable {
+    public let names: [SecretStoreName]
+    public let total: Int
+    public let truncated: Bool
+
+    public init(
+        names: [SecretStoreName],
+        total: Int,
+        truncated: Bool)
+    {
+        self.names = names
+        self.total = total
+        self.truncated = truncated
     }
 }
 
@@ -12855,17 +13034,20 @@ public struct SecretsStoreSetParams: Codable, Sendable {
     public let name: String
     public let value: String
     public let kind: AnyCodable
+    public let audience: AnyCodable?
     public let allowedhosts: [String]?
 
     public init(
         name: String,
         value: String,
         kind: AnyCodable,
+        audience: AnyCodable? = nil,
         allowedhosts: [String]? = nil)
     {
         self.name = name
         self.value = value
         self.kind = kind
+        self.audience = audience
         self.allowedhosts = allowedhosts
     }
 
@@ -12873,6 +13055,7 @@ public struct SecretsStoreSetParams: Codable, Sendable {
         case name
         case value
         case kind
+        case audience
         case allowedhosts = "allowedHosts"
     }
 }
@@ -28545,6 +28728,243 @@ public enum SecretStoreEntry: Codable, Sendable {
                 forKey: .discriminator,
                 in: container,
                 debugDescription: "Unknown SecretStoreEntry discriminator value"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .secret(let value): try value.encode(to: encoder)
+        case .env(let value): try value.encode(to: encoder)
+        }
+    }
+}
+
+public struct SecretsAssignmentsEntrySecret: Codable, Sendable {
+    public let name: SecretStoreName
+    public let scopekind: String
+    public let scopeid: String
+    public let audience: AnyCodable?
+    public let createdatms: Int
+    public let updatedatms: Int
+    public let updatedby: String?
+    public let kind: String
+    public let allowedhosts: [String]?
+
+    public init(
+        name: SecretStoreName,
+        audience: AnyCodable? = nil,
+        createdatms: Int,
+        updatedatms: Int,
+        updatedby: String? = nil,
+        allowedhosts: [String]? = nil
+    )
+    {
+        self.name = name
+        self.scopekind = "team"
+        self.scopeid = ""
+        self.audience = audience
+        self.createdatms = createdatms
+        self.updatedatms = updatedatms
+        self.updatedby = updatedby
+        self.kind = "secret"
+        self.allowedhosts = allowedhosts
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case scopekind = "scopeKind"
+        case scopeid = "scopeId"
+        case audience
+        case createdatms = "createdAtMs"
+        case updatedatms = "updatedAtMs"
+        case updatedby = "updatedBy"
+        case kind
+        case allowedhosts = "allowedHosts"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let rawContainer = try decoder.container(keyedBy: GatewayAnyCodingKey.self)
+        let unexpectedKeys = rawContainer.allKeys
+            .map(\.stringValue)
+            .filter { !Set(["name", "scopeKind", "scopeId", "audience", "createdAtMs", "updatedAtMs", "updatedBy", "kind", "allowedHosts"]).contains($0) }
+        if !unexpectedKeys.isEmpty {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: rawContainer.codingPath,
+                    debugDescription: "Unexpected keys for SecretsAssignmentsEntrySecret: \(unexpectedKeys.sorted().joined(separator: ", "))"
+                )
+            )
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try container.decode(SecretStoreName.self, forKey: .name)
+        let decodedScopekind = try container.decode(String.self, forKey: .scopekind)
+        guard decodedScopekind == "team" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .scopekind,
+                in: container,
+                debugDescription: "Expected scopeKind to equal team"
+            )
+        }
+        self.scopekind = "team"
+        let decodedScopeid = try container.decode(String.self, forKey: .scopeid)
+        guard decodedScopeid == "" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .scopeid,
+                in: container,
+                debugDescription: "Expected scopeId to equal "
+            )
+        }
+        self.scopeid = ""
+        self.audience = try container.decodeIfPresent(AnyCodable.self, forKey: .audience)
+        self.createdatms = try container.decode(Int.self, forKey: .createdatms)
+        self.updatedatms = try container.decode(Int.self, forKey: .updatedatms)
+        self.updatedby = try container.decodeIfPresent(String.self, forKey: .updatedby)
+        let decodedKind = try container.decode(String.self, forKey: .kind)
+        guard decodedKind == "secret" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind,
+                in: container,
+                debugDescription: "Expected kind to equal secret"
+            )
+        }
+        self.kind = "secret"
+        self.allowedhosts = try container.decodeIfPresent([String].self, forKey: .allowedhosts)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode("team", forKey: .scopekind)
+        try container.encode("", forKey: .scopeid)
+        try container.encodeIfPresent(audience, forKey: .audience)
+        try container.encode(createdatms, forKey: .createdatms)
+        try container.encode(updatedatms, forKey: .updatedatms)
+        try container.encodeIfPresent(updatedby, forKey: .updatedby)
+        try container.encode("secret", forKey: .kind)
+        try container.encodeIfPresent(allowedhosts, forKey: .allowedhosts)
+    }
+}
+
+public struct SecretsAssignmentsEntryEnv: Codable, Sendable {
+    public let name: SecretStoreName
+    public let scopekind: String
+    public let scopeid: String
+    public let audience: AnyCodable?
+    public let createdatms: Int
+    public let updatedatms: Int
+    public let updatedby: String?
+    public let kind: String
+
+    public init(
+        name: SecretStoreName,
+        audience: AnyCodable? = nil,
+        createdatms: Int,
+        updatedatms: Int,
+        updatedby: String? = nil
+    )
+    {
+        self.name = name
+        self.scopekind = "team"
+        self.scopeid = ""
+        self.audience = audience
+        self.createdatms = createdatms
+        self.updatedatms = updatedatms
+        self.updatedby = updatedby
+        self.kind = "env"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case scopekind = "scopeKind"
+        case scopeid = "scopeId"
+        case audience
+        case createdatms = "createdAtMs"
+        case updatedatms = "updatedAtMs"
+        case updatedby = "updatedBy"
+        case kind
+    }
+
+    public init(from decoder: Decoder) throws {
+        let rawContainer = try decoder.container(keyedBy: GatewayAnyCodingKey.self)
+        let unexpectedKeys = rawContainer.allKeys
+            .map(\.stringValue)
+            .filter { !Set(["name", "scopeKind", "scopeId", "audience", "createdAtMs", "updatedAtMs", "updatedBy", "kind"]).contains($0) }
+        if !unexpectedKeys.isEmpty {
+            throw DecodingError.dataCorrupted(
+                .init(
+                    codingPath: rawContainer.codingPath,
+                    debugDescription: "Unexpected keys for SecretsAssignmentsEntryEnv: \(unexpectedKeys.sorted().joined(separator: ", "))"
+                )
+            )
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try container.decode(SecretStoreName.self, forKey: .name)
+        let decodedScopekind = try container.decode(String.self, forKey: .scopekind)
+        guard decodedScopekind == "team" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .scopekind,
+                in: container,
+                debugDescription: "Expected scopeKind to equal team"
+            )
+        }
+        self.scopekind = "team"
+        let decodedScopeid = try container.decode(String.self, forKey: .scopeid)
+        guard decodedScopeid == "" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .scopeid,
+                in: container,
+                debugDescription: "Expected scopeId to equal "
+            )
+        }
+        self.scopeid = ""
+        self.audience = try container.decodeIfPresent(AnyCodable.self, forKey: .audience)
+        self.createdatms = try container.decode(Int.self, forKey: .createdatms)
+        self.updatedatms = try container.decode(Int.self, forKey: .updatedatms)
+        self.updatedby = try container.decodeIfPresent(String.self, forKey: .updatedby)
+        let decodedKind = try container.decode(String.self, forKey: .kind)
+        guard decodedKind == "env" else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind,
+                in: container,
+                debugDescription: "Expected kind to equal env"
+            )
+        }
+        self.kind = "env"
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode("team", forKey: .scopekind)
+        try container.encode("", forKey: .scopeid)
+        try container.encodeIfPresent(audience, forKey: .audience)
+        try container.encode(createdatms, forKey: .createdatms)
+        try container.encode(updatedatms, forKey: .updatedatms)
+        try container.encodeIfPresent(updatedby, forKey: .updatedby)
+        try container.encode("env", forKey: .kind)
+    }
+}
+
+public enum SecretsAssignmentsEntry: Codable, Sendable {
+    case secret(SecretsAssignmentsEntrySecret)
+    case env(SecretsAssignmentsEntryEnv)
+
+    private enum CodingKeys: String, CodingKey {
+        case discriminator = "kind"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let discriminator = try container.decode(String.self, forKey: .discriminator)
+        switch discriminator {
+        case "secret": self = try .secret(SecretsAssignmentsEntrySecret(from: decoder))
+        case "env": self = try .env(SecretsAssignmentsEntryEnv(from: decoder))
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .discriminator,
+                in: container,
+                debugDescription: "Unknown SecretsAssignmentsEntry discriminator value"
             )
         }
     }

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { normalizeAgentIdStrict } from "@openclaw/normalization-core/agent-id";
 import { err, ok, type Result } from "@openclaw/normalization-core/result";
 import type { Selectable } from "kysely";
 import { ENV_SECRET_REF_ID_RE } from "../../config/types.secrets.js";
@@ -9,7 +8,6 @@ import {
   getNodeSqliteKysely,
 } from "../../infra/kysely-sync.js";
 import { normalizeSqliteNumber } from "../../infra/sqlite-number.js";
-import { logWarn } from "../../logger.js";
 import { registerSecretValueForRedaction } from "../../logging/secret-redaction-registry.js";
 import { withExistingOpenClawStateDatabaseReadOnly } from "../../state/openclaw-state-db-readonly.js";
 import { ensureSecretStoreSchema } from "../../state/openclaw-state-db-schema-additive.js";
@@ -19,18 +17,33 @@ import {
   runOpenClawStateWriteTransaction,
   type OpenClawStateDatabaseOptions,
 } from "../../state/openclaw-state-db.js";
-import { normalizeExactAllowedHost } from "../exact-hostname.js";
-import { sealSecretSentinel } from "../sentinel.js";
 import {
   classifyHiddenGitHubStoreName,
   GITHUB_DEVICE_STORE_MAX_AGE_MS,
   GITHUB_SETUP_HANDOFF_MAX_AGE_MS,
 } from "./secret-store-hidden-github.js";
 import {
-  SECRET_STORE_ALLOWED_HOSTS_MAX,
+  isMissingSecretStoreTableError as sharedIsMissingSecretStoreTableError,
+  isSecretStoreAudience,
+  normalizeSecretAllowedHosts,
+  normalizeSecretStoreAudience,
+  parseSecretAllowedHosts,
+  type SecretStoreAudience,
+  type SecretStoreDatabase as SharedSecretStoreDatabase,
+  type SecretStoreKind,
+  type SecretStoreScope,
+} from "./secret-store-shared.js";
+import {
   SECRET_STORE_VALUE_MAX_BYTES,
   SecretStoreValidationError,
 } from "./secret-store-validation-error.js";
+export {
+  normalizeSecretAllowedHosts,
+  resolveAgentSecretAssignmentEnforcement,
+  type AgentSecretAssignmentEnforcement,
+} from "./secret-store-shared.js";
+export { consumeGitHubSetupHandoff } from "./secret-store-hidden-github.js";
+export { readSecretStoreExecEnvironment } from "./secret-store-exec-environment.js";
 
 export {
   deleteHiddenGitHubSecretRecord,
@@ -44,37 +57,8 @@ export {
   SecretStoreValidationError,
 } from "./secret-store-validation-error.js";
 
-type SecretStoreDatabase = Pick<OpenClawStateKyselyDatabase, "secret_store_entries">;
-type SecretStoreAccessDatabase = Pick<
-  OpenClawStateKyselyDatabase,
-  "secret_store_entries" | "agent_secret_assignments"
->;
+type SecretStoreDatabase = SharedSecretStoreDatabase;
 type SecretStoreRow = Selectable<OpenClawStateKyselyDatabase["secret_store_entries"]>;
-type SecretStoreScope = { kind: "team" };
-type SecretStoreKind = "secret" | "env";
-
-/**
- * Secret-value audience: orthogonal to value protection (kind).
- * "all" preserves legacy team-wide delivery to every valid agent;
- * "selected" restricts delivery to explicitly assigned agents via
- * agent_secret_assignments. Existing rows predate the column and behave as
- * "all" for backward compatibility; empty assignment sets never imply
- * global access.
- */
-export type SecretStoreAudience = "all" | "selected";
-
-const SECRET_STORE_AUDIENCES: readonly SecretStoreAudience[] = ["all", "selected"];
-
-/** Normalizes the persisted audience; absent/invalid legacy values stay "all". */
-export function normalizeSecretStoreAudience(
-  value: string | null | undefined,
-): SecretStoreAudience {
-  return value === "selected" ? "selected" : "all";
-}
-
-function isSecretStoreAudience(value: unknown): value is SecretStoreAudience {
-  return typeof value === "string" && SECRET_STORE_AUDIENCES.includes(value as never);
-}
 
 export type SecretStoreWriteParams = {
   scope: SecretStoreScope;
@@ -107,18 +91,6 @@ export type SecretStoreEntryMetadata = {
   audience: SecretStoreAudience;
   allowedHosts?: string[];
   valuePreview?: string;
-};
-
-type SecretStoreEgressBinding = {
-  name: string;
-  sentinel: string;
-  allowedHosts: string[];
-};
-
-export type SecretStoreExecEnvironment = {
-  env?: Record<string, string>;
-  secretSentinels?: Record<string, string>;
-  secretEgressBindings?: SecretStoreEgressBinding[];
 };
 
 type SecretStoreReadError =
@@ -170,49 +142,7 @@ export function assertSecretStoreValue(value: string, kind: SecretStoreKind): vo
   }
 }
 
-function normalizeSecretAllowedHost(raw: string): string {
-  try {
-    return normalizeExactAllowedHost(raw);
-  } catch (error) {
-    throw new SecretStoreValidationError(
-      "SECRET_STORE_INVALID_ALLOWED_HOST",
-      error instanceof Error ? error.message : `Allowed host "${raw}" is not a valid hostname.`,
-    );
-  }
-}
-
-export function normalizeSecretAllowedHosts(hosts: readonly string[]): string[] {
-  if (hosts.length > SECRET_STORE_ALLOWED_HOSTS_MAX) {
-    throw new SecretStoreValidationError(
-      "SECRET_STORE_INVALID_ALLOWED_HOST",
-      `A secret can allow at most ${SECRET_STORE_ALLOWED_HOSTS_MAX} hosts.`,
-    );
-  }
-  return [...new Set(hosts.map(normalizeSecretAllowedHost))].toSorted();
-}
-
-function parseSecretAllowedHosts(raw: string | null | undefined): string[] {
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) && parsed.every((host) => typeof host === "string")
-      ? normalizeSecretAllowedHosts(parsed)
-      : [];
-  } catch {
-    // Corrupt policy is never interpreted permissively: an empty list fails closed.
-    return [];
-  }
-}
-
-function isMissingSecretStoreTableError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error as NodeJS.ErrnoException).code === "ERR_SQLITE_ERROR" &&
-    error.message === "no such table: secret_store_entries"
-  );
-}
+const isMissingSecretStoreTableError = sharedIsMissingSecretStoreTableError;
 
 function toMetadata(row: SecretStoreRow): SecretStoreEntryMetadata {
   if (row.kind === "secret") {
@@ -304,312 +234,6 @@ export function getSecretStoreEntryMetadata(params: {
   }
 }
 
-/**
- * Resolves one validated agent's effective secret-name access over the live
- * team store: every live entry with audience "all" (legacy team-wide
- * delivery) plus every live entry with audience "selected" that has an
- * explicit assignment row for the agent. An empty assignment set never
- * implies global access. Missing tables fail open only to the "all" side —
- * identical to legacy behavior before assignments existed.
- */
-export function listEffectiveAgentSecretNames(params: {
-  agentId: string;
-  database?: OpenClawStateDatabaseOptions;
-}): string[] {
-  const normalized = normalizeAgentIdStrict(params.agentId);
-  if (!normalized.ok) {
-    return [];
-  }
-  try {
-    return (
-      withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
-        const db = getNodeSqliteKysely<SecretStoreAccessDatabase>(sqlite);
-        const rows = executeSqliteQuerySync(
-          sqlite,
-          db
-            .selectFrom("secret_store_entries")
-            .select(["name", "audience"])
-            .where("scope_kind", "=", "team")
-            .where("scope_id", "=", "")
-            .where("deleted_at_ms", "is", null),
-        ).rows.filter((row) => classifyHiddenGitHubStoreName(row.name) === undefined);
-        const assigned = new Set(
-          executeSqliteQuerySync(
-            sqlite,
-            db
-              .selectFrom("agent_secret_assignments")
-              .select("secret_name")
-              .where("agent_id", "=", normalized.value),
-          ).rows.map((row) => row.secret_name),
-        );
-        return rows
-          .filter(
-            (row) => normalizeSecretStoreAudience(row.audience) === "all" || assigned.has(row.name),
-          )
-          .map((row) => row.name)
-          .sort();
-      }, params.database ?? {}) ?? []
-    );
-  } catch (error) {
-    if (
-      isMissingSecretStoreTableError(error) ||
-      (error instanceof Error && error.message === "no such table: agent_secret_assignments")
-    ) {
-      // No assignments table: selected entries cannot exist yet; "all"
-      // entries keep legacy delivery.
-      try {
-        return listSecretStoreEntries({ scope: { kind: "team" }, database: params.database })
-          .filter((entry) => entry.audience === "all")
-          .map((entry) => entry.name);
-      } catch {
-        return [];
-      }
-    }
-    throw error;
-  }
-}
-
-/**
- * Effective single-name access check mirroring listEffectiveAgentSecretNames:
- * audience "all" is accessible to every valid agent; audience "selected"
- * requires an explicit assignment row.
- */
-export function hasEffectiveAgentSecretAccess(params: {
-  agentId: string;
-  secretName: string;
-  database?: OpenClawStateDatabaseOptions;
-}): boolean {
-  const normalized = normalizeAgentIdStrict(params.agentId);
-  if (!normalized.ok) {
-    return false;
-  }
-  try {
-    return (
-      withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
-        const db = getNodeSqliteKysely<SecretStoreAccessDatabase>(sqlite);
-        const entry = executeSqliteQueryTakeFirstSync(
-          sqlite,
-          db
-            .selectFrom("secret_store_entries")
-            .select("audience")
-            .where("scope_kind", "=", "team")
-            .where("scope_id", "=", "")
-            .where("name", "=", params.secretName)
-            .where("deleted_at_ms", "is", null)
-            .limit(1),
-        );
-        if (!entry || classifyHiddenGitHubStoreName(params.secretName) !== undefined) {
-          return false;
-        }
-        if (normalizeSecretStoreAudience(entry.audience) === "all") {
-          return true;
-        }
-        return (
-          executeSqliteQueryTakeFirstSync(
-            sqlite,
-            db
-              .selectFrom("agent_secret_assignments")
-              .select("secret_name")
-              .where("agent_id", "=", normalized.value)
-              .where("secret_name", "=", params.secretName)
-              .limit(1),
-          ) !== undefined
-        );
-      }, params.database ?? {}) ?? false
-    );
-  } catch (error) {
-    if (isMissingSecretStoreTableError(error)) {
-      return false;
-    }
-    if (error instanceof Error && error.message === "no such table: agent_secret_assignments") {
-      // Legacy database: only "all"-audience entries can exist.
-      try {
-        const entry = getSecretStoreEntryMetadata({
-          scope: { kind: "team" },
-          name: params.secretName,
-          database: params.database,
-        });
-        return entry?.audience === "all";
-      } catch {
-        return false;
-      }
-    }
-    throw error;
-  }
-}
-
-/** Atomically returns and hard-deletes one exact fresh, non-egress GitHub setup handoff. */
-export function consumeGitHubSetupHandoff(params: {
-  name: string;
-  nowMs?: number;
-  database?: OpenClawStateDatabaseOptions;
-}): string | undefined {
-  if (classifyHiddenGitHubStoreName(params.name) !== "setup") {
-    return undefined;
-  }
-  const now = params.nowMs ?? Date.now();
-  try {
-    let value: string | undefined;
-    runOpenClawStateWriteTransaction(
-      ({ db: sqlite }) => {
-        const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
-        const row = executeSqliteQueryTakeFirstSync(
-          sqlite,
-          db
-            .selectFrom("secret_store_entries")
-            .select("value")
-            .where("scope_kind", "=", "team")
-            .where("scope_id", "=", "")
-            .where("name", "=", params.name)
-            .where("kind", "=", "secret")
-            .where("allowed_hosts", "is", null)
-            .where("created_at_ms", ">=", now - GITHUB_SETUP_HANDOFF_MAX_AGE_MS)
-            .where("created_at_ms", "<=", now)
-            .where("deleted_at_ms", "is", null),
-        );
-        if (!row) {
-          return;
-        }
-        executeSqliteQuerySync(
-          sqlite,
-          db
-            .deleteFrom("secret_store_entries")
-            .where("scope_kind", "=", "team")
-            .where("scope_id", "=", "")
-            .where("name", "=", params.name),
-        );
-        value = row.value;
-      },
-      params.database,
-      { operationLabel: "secrets.store.consume-github-setup-handoff" },
-    );
-    if (value !== undefined) {
-      registerSecretValueForRedaction(value);
-    }
-    return value;
-  } catch (error) {
-    if (isMissingSecretStoreTableError(error)) {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
-/** Config policy controlling agent assignment filtering of exec store snapshots. */
-export type AgentSecretAssignmentEnforcement = "off" | "advisory" | "enforce";
-
-/** Resolves the snapshot enforcement mode from raw config; anything invalid or absent stays "off". */
-export function resolveAgentSecretAssignmentEnforcement(
-  value: unknown,
-): AgentSecretAssignmentEnforcement {
-  return value === "advisory" || value === "enforce" ? value : "off";
-}
-
-/** Captures one coherent team-store snapshot for an agent run's exec environment. */
-export function readSecretStoreExecEnvironment(params: {
-  includeSecretSentinels: boolean;
-  excludeNames?: readonly string[];
-  /** Derived agent run identity; never caller-supplied. */
-  agentId?: string;
-  /** Assignment filtering policy resolved from config. Default "off" preserves legacy behavior. */
-  assignmentEnforcement?: AgentSecretAssignmentEnforcement;
-  /** Pre-resolved assigned names for `agentId`; resolved by the caller-side snapshot helper. */
-  assignedNames?: Set<string>;
-  database?: OpenClawStateDatabaseOptions;
-}): SecretStoreExecEnvironment {
-  try {
-    return (
-      withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
-        const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
-        const rows = executeSqliteQuerySync(
-          sqlite,
-          db
-            .selectFrom("secret_store_entries")
-            .selectAll()
-            .where("scope_kind", "=", "team")
-            .where("scope_id", "=", "")
-            .where("deleted_at_ms", "is", null)
-            .orderBy("name", "asc"),
-        ).rows;
-        const env: Record<string, string> = {};
-        const secretSentinels: Record<string, string> = {};
-        const secretEgressBindings: SecretStoreEgressBinding[] = [];
-        const excludedNames = new Set(params.excludeNames ?? []);
-        // Audience filtering: identity is the tool's derived agentId, never
-        // model input. "all"-audience entries keep legacy team-wide delivery
-        // to every valid agent; "selected"-audience entries project only to
-        // explicitly assigned agents, and an empty assignment set never
-        // implies global access. "enforce" fails closed on a missing/invalid
-        // identity (enforced by the caller); "advisory" logs drift and still
-        // delivers.
-        // Selected-audience entries are gated on an explicit assignment for
-        // the derived agent identity: without an identity, or without that
-        // agent's assignment row, a selected entry projects only in the
-        // advisory soak (with a warning); otherwise it fails closed
-        // individually. All-audience entries keep legacy team-wide delivery.
-        // Enforcement mode only chooses silent withholding (off/enforce)
-        // versus warn-and-deliver soak (advisory).
-        const enforcement = resolveAgentSecretAssignmentEnforcement(params.assignmentEnforcement);
-        const assignedNames =
-          params.agentId && params.assignedNames ? params.assignedNames : undefined;
-        const advisory = enforcement === "advisory";
-        for (const row of rows) {
-          if (
-            classifyHiddenGitHubStoreName(row.name) !== undefined ||
-            excludedNames.has(row.name)
-          ) {
-            continue;
-          }
-          if (
-            normalizeSecretStoreAudience(row.audience) === "selected" &&
-            !(assignedNames?.has(row.name) ?? false)
-          ) {
-            if (advisory && assignedNames) {
-              // Advisory soak with a known identity keeps delivery of the
-              // selected entry and only surfaces the drift from its explicit
-              // assignment set. Without an identity there is no drift to soak
-              // — the entry belongs to other agents and fails closed.
-              logWarn(
-                `secrets: exec snapshot includes selected-audience store entry ${row.name} without an assignment for this agent`,
-              );
-            } else {
-              continue;
-            }
-          }
-          if (row.kind === "env") {
-            env[row.name] = row.value;
-            continue;
-          }
-          registerSecretValueForRedaction(row.value);
-          if (params.includeSecretSentinels) {
-            // Subprocesses must never receive plaintext, even when provider-auth
-            // sentinel masking is disabled for compatibility.
-            const sentinel = sealSecretSentinel(row.value, {
-              label: `exec-store:${row.name}`,
-            });
-            secretSentinels[row.name] = sentinel;
-            secretEgressBindings.push({
-              name: row.name,
-              sentinel,
-              allowedHosts: parseSecretAllowedHosts(row.allowed_hosts),
-            });
-          }
-        }
-        return {
-          ...(Object.keys(env).length > 0 ? { env } : {}),
-          ...(Object.keys(secretSentinels).length > 0 ? { secretSentinels } : {}),
-          ...(secretEgressBindings.length > 0 ? { secretEgressBindings } : {}),
-        };
-      }, params.database ?? {}) ?? {}
-    );
-  } catch (error) {
-    if (isMissingSecretStoreTableError(error)) {
-      return {};
-    }
-    throw error;
-  }
-}
-
 export function readSecretStoreValue(params: {
   scope: SecretStoreScope;
   name: string;
@@ -676,27 +300,34 @@ function writeSecretStoreEntryInternal(
       ? normalizeSecretAllowedHosts(params.allowedHosts)
       : undefined;
   const allowedHostsJson = allowedHosts?.length ? JSON.stringify(allowedHosts) : null;
-  const audience: SecretStoreAudience = isSecretStoreAudience(params.audience)
-    ? params.audience
-    : "all";
   const { scopeKind, scopeId } = normalizeScope(params.scope);
   const now = Date.now();
   return runOpenClawStateWriteTransaction(
     ({ db: sqlite }) => {
       ensureSecretStoreSchema(sqlite);
       const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
-      const previous = capturePrevious
-        ? executeSqliteQueryTakeFirstSync(
-            sqlite,
-            db
-              .selectFrom("secret_store_entries")
-              .select(["value", "kind", "audience", "allowed_hosts", "updated_by"])
-              .where("scope_kind", "=", scopeKind)
-              .where("scope_id", "=", scopeId)
-              .where("name", "=", params.name)
-              .where("deleted_at_ms", "is", null),
-          )
-        : undefined;
+      // The prior row is read for the audience decision on every write path;
+      // it becomes a rollback snapshot only when the caller captures it.
+      const previousRow = executeSqliteQueryTakeFirstSync(
+        sqlite,
+        db
+          .selectFrom("secret_store_entries")
+          .select(["value", "kind", "audience", "allowed_hosts", "updated_by"])
+          .where("scope_kind", "=", scopeKind)
+          .where("scope_id", "=", scopeId)
+          .where("name", "=", params.name)
+          .where("deleted_at_ms", "is", null),
+      );
+      const previous = capturePrevious ? previousRow : undefined;
+      // Audience decision is separate from the value write: a replacement that
+      // omits `audience` preserves the stored audience, so routine credential
+      // rotation can never silently widen a "selected" entry to every agent.
+      // Only a brand-new entry defaults to "all" (legacy team-wide delivery).
+      const audience: SecretStoreAudience = isSecretStoreAudience(params.audience)
+        ? params.audience
+        : previousRow
+          ? normalizeSecretStoreAudience(previousRow.audience)
+          : "all";
       executeSqliteQuerySync(
         sqlite,
         db

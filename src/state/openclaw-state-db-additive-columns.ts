@@ -33,6 +33,7 @@ const lazyColumns = [
   ["session_groups", "cwd", "TEXT", true],
   ["session_groups", "worktree", "INTEGER", true],
   ["secret_store_entries", "allowed_hosts", "TEXT"],
+  ["secret_store_entries", "audience", "TEXT"],
   ["web_push_subscriptions", "device_id", "TEXT", true],
   ["web_push_subscriptions", "user_profile_id", "TEXT", true],
   ["web_push_subscriptions", "preferences_json", "TEXT", true],

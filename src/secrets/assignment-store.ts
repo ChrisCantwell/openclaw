@@ -121,7 +121,7 @@ export function countAgentSecretAssignments(params: {
             .select((expression) => expression.fn.countAll<number>().as("count"))
             .where("agent_id", "=", agentId),
         ).rows[0];
-        return Number(row?.count ?? 0);
+        return row?.count ?? 0;
       }, params.database ?? {}) ?? 0
     );
   } catch (error) {
@@ -182,8 +182,12 @@ export function listAgentSecretAssignmentsAdmin(params: {
           .orderBy("secret_name", "asc")
           .limit(AGENT_SECRET_ASSIGNMENTS_PAGE_SIZE + 1);
         if (cursorAgentId !== null && cursorSecretName !== null) {
-          query = query.where(({ eb, refTuple, tuple }) =>
-            eb(refTuple("agent_id", "secret_name"), ">", tuple(cursorAgentId, cursorSecretName)),
+          query = query.where((eb) =>
+            eb(
+              eb.refTuple("agent_id", "secret_name"),
+              ">",
+              eb.tuple(cursorAgentId, cursorSecretName),
+            ),
           );
         }
         return executeSqliteQuerySync(sqlite, query).rows;

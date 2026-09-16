@@ -416,7 +416,7 @@ describe("secrets tool agent inventory scoping", () => {
     expect(structured).toContain('"total":600');
     expect(structured).toContain('"truncated":true');
     expect(structured).toContain('"count":600');
-    const parsed = JSON.parse(result.content[0].text) as {
+    const parsed = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "") as {
       names: string[];
       count: number;
       total: number;
@@ -449,7 +449,7 @@ describe("secrets tool agent inventory scoping", () => {
     const result = await tool.execute("call-assigned-names-small", {
       action: "list_assigned_secret_names",
     });
-    const parsed = JSON.parse(result.content[0].text) as {
+    const parsed = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "") as {
       names: string[];
       count: number;
       total: number;

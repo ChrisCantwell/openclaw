@@ -340,3 +340,60 @@ export function deleteHiddenGitHubSecretRecord(params: {
     }
   }
 }
+
+/** Atomically returns and hard-deletes one exact fresh, non-egress GitHub setup handoff. */
+export function consumeGitHubSetupHandoff(params: {
+  name: string;
+  nowMs?: number;
+  database?: OpenClawStateDatabaseOptions;
+}): string | undefined {
+  if (classifyHiddenGitHubStoreName(params.name) !== "setup") {
+    return undefined;
+  }
+  const now = params.nowMs ?? Date.now();
+  try {
+    let value: string | undefined;
+    runOpenClawStateWriteTransaction(
+      ({ db: sqlite }) => {
+        const db = getNodeSqliteKysely<HiddenGitHubStoreDatabase>(sqlite);
+        const row = executeSqliteQueryTakeFirstSync(
+          sqlite,
+          db
+            .selectFrom("secret_store_entries")
+            .select("value")
+            .where("scope_kind", "=", "team")
+            .where("scope_id", "=", "")
+            .where("name", "=", params.name)
+            .where("kind", "=", "secret")
+            .where("allowed_hosts", "is", null)
+            .where("created_at_ms", ">=", now - GITHUB_SETUP_HANDOFF_MAX_AGE_MS)
+            .where("created_at_ms", "<=", now)
+            .where("deleted_at_ms", "is", null),
+        );
+        if (!row) {
+          return;
+        }
+        executeSqliteQuerySync(
+          sqlite,
+          db
+            .deleteFrom("secret_store_entries")
+            .where("scope_kind", "=", "team")
+            .where("scope_id", "=", "")
+            .where("name", "=", params.name),
+        );
+        value = row.value;
+      },
+      params.database,
+      { operationLabel: "secrets.store.consume-github-setup-handoff" },
+    );
+    if (value !== undefined) {
+      registerSecretValueForRedaction(value);
+    }
+    return value;
+  } catch (error) {
+    if (isMissingSecretStoreTableError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}

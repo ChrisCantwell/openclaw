@@ -19,10 +19,24 @@ const storeMocks = vi.hoisted(() => ({
   hasEffectiveAccess: vi.fn(() => false),
   listAssignmentsAdmin: vi.fn(() => ({
     assignments: [] as Array<{ agentId: string; names: string[] }>,
+    nextCursor: undefined as string | undefined,
   })),
   writeAssignment: vi.fn(),
   deleteAssignment: vi.fn(),
-  getEntryMetadata: vi.fn(() => null),
+  getEntryMetadata: vi.fn(
+    () =>
+      null as {
+        name: string;
+        kind: string;
+        scopeKind: string;
+        scopeId: string;
+        createdAtMs: number;
+        updatedAtMs: number;
+        valuePreview?: string;
+        audience?: string;
+        allowedHosts?: string[];
+      } | null,
+  ),
 }));
 
 vi.mock("../../secrets/assignment-store.js", () => ({
@@ -61,6 +75,13 @@ vi.mock("../../secrets/store/secret-store.js", () => {
     writeSecretStoreEntry: storeMocks.writeEntry,
   };
 });
+
+// Assignment-scope lookups live in their own module; mock the same path the
+// handler imports so the interception applies.
+vi.mock("../../secrets/store/secret-store-agent-access.js", () => ({
+  hasEffectiveAgentSecretAccess: storeMocks.hasEffectiveAccess,
+  listEffectiveAgentSecretNames: storeMocks.listEffectiveNames,
+}));
 
 // Handler tests only need the registry verdicts they exercise. Dedicated
 // target-registry tests own bundled plugin discovery and compilation.
@@ -160,7 +181,7 @@ async function invokeStoreMethod(params: {
 
 async function invokeAssignmentMethod(params: {
   handlers: ReturnType<typeof createSecretsHandlers>;
-  method: "secrets.assignments.list" | "secrets.assignments.has";
+  method: "secrets.assignments.list" | "secrets.assignments.has" | "secrets.assignments.entry";
   requestParams: Record<string, unknown>;
   respond: ReturnType<typeof vi.fn>;
   agentId?: string;
@@ -917,7 +938,7 @@ describe("secrets handlers", () => {
   it("enforcement set fails after the bounded deadline when the runtime never observes the mode", async () => {
     // Persist succeeds but the observer never applies; the handler must fail
     // truthfully within the bounded deadline rather than hanging forever.
-    let mode: "off" | "advisory" | "enforce" = "off";
+    const mode: "off" | "advisory" | "enforce" = "off";
     const handlers = createHandlers({
       configAccess: {
         readAgentAssignmentEnforcement: () => mode,

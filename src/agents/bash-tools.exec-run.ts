@@ -25,7 +25,8 @@ import {
   isSecretEgressProxyActive,
   registerSecretEgressProxyRun,
 } from "../secrets/egress-proxy/registry.js";
-import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store.js";
+import { revalidateAssignedSecretNames } from "../secrets/exec-store-snapshot.js";
+import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store-shared.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import { normalizeDeliveryContext } from "../utils/delivery-context.shared.js";
 import { captureAgentToolSourceExecutionGuard } from "./agent-tool-source-execution-guard.js";
@@ -57,6 +58,10 @@ import {
   shouldSkipExecScriptPreflight,
   validateScriptFileForShellBleed,
 } from "./bash-tools.exec-script-preflight.js";
+import {
+  armSecretEgressForLaunch,
+  buildPreSpawnSecretAuthorityRecheck,
+} from "./bash-tools.exec-secret-authority.js";
 import {
   attachExecApprovalReview,
   buildExecForegroundResult,
@@ -234,6 +239,11 @@ export function createExecTool(
       const startedAt = Date.now();
       let execCommandOverride: string | undefined;
       let gatewayApproval: GatewayApprovalResult | undefined;
+      // beforeSpawn hooks read this ref so the pre-spawn recheck observes the
+      // approval result captured for the current execution.
+      const gatewayApprovalRef: { current: GatewayApprovalResult | undefined } = {
+        current: undefined,
+      };
       let approvalReview: ExecToolApprovalReview | undefined;
       const foregroundFallbackWarning =
         !allowBackground && (params.background === true || typeof params.yieldMs === "number")
@@ -418,20 +428,20 @@ export function createExecTool(
 
         const resolvedExecEnvState = requestPreparation.getResolvedExecEnvPreparedState(params);
         const storeEnv = await resolveStoreEnv();
-        // The proxy is loopback-owned by the Gateway. Sandbox and node hosts
-        // cannot use its sentinels, so both sides of the contract stay absent.
+        // Loopback-owned by the Gateway; sandbox and node hosts cannot use its
+        // sentinels, so both sides of the contract stay absent.
         const useSecretEgress = secretEgressEnabled && host === "gateway";
-        let secretEgressEnv: Record<string, string> | undefined;
-        if (useSecretEgress) {
-          if (!defaults?.operationalRunInstance) {
-            throw new Error("Secret egress proxy requires an admitted agent run instance");
-          }
-          assertSourceActive();
-          secretEgressEnv = registerSecretEgressProxyRun(
-            defaults.operationalRunInstance,
-            storeEnv.secretEgressBindings ?? [],
-          );
-        }
+        const secretEgressEnv = await armSecretEgressForLaunch({
+          enabled: useSecretEgress,
+          storeEnv,
+          operationalRunInstance: defaults?.operationalRunInstance,
+          agentId,
+          config: defaults?.config,
+          cwd: workdir,
+          registerRun: registerSecretEgressProxyRun,
+          revalidate: revalidateAssignedSecretNames,
+        });
+        assertSourceActive();
         const { env, requestedEnv } = resolvePreparedExecEnvironment({
           execParams: params,
           host,
@@ -555,6 +565,7 @@ export function createExecTool(
           }
           signal?.throwIfAborted();
           gatewayApproval = gatewayResult;
+          gatewayApprovalRef.current = gatewayResult;
           execCommandOverride = gatewayResult.allowWithoutEnforcedCommand
             ? undefined
             : gatewayResult.execCommandOverride;
@@ -603,7 +614,14 @@ export function createExecTool(
           processContinuationAvailable: allowBackground,
           startupSignal: signal,
           onUpdate,
-          beforeSpawn: gatewayApproval?.revalidateBeforeExecution,
+          beforeSpawn: buildPreSpawnSecretAuthorityRecheck({
+            gatewayRevalidate: gatewayApprovalRef.current?.revalidateBeforeExecution,
+            secretEgressEnabled,
+            resolveStoreEnv,
+            agentId,
+            config: defaults?.config,
+            cwd: defaults?.cwd,
+          }),
           assertCurrent: gatewayApproval?.assertCurrent,
           onSettledBeforeNotify: settlement.settle,
         });

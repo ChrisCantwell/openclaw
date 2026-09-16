@@ -123,6 +123,8 @@ type StoreEntry = {
   value: string;
   kind: "env" | "secret";
   allowedHosts?: string[];
+  audience?: "all" | "selected";
+  updatedBy?: string;
 };
 
 type StoreEnvHost = "gateway" | "sandbox" | "node";

@@ -10,6 +10,7 @@ import {
 import { writeAgentSecretAssignment } from "../assignment-store.js";
 import {
   readAssignedSecretStoreExecEnvironment,
+  revalidateAssignedSecretNames,
   resolveExecSnapshotAssignmentEnforcement,
 } from "../exec-store-snapshot.js";
 import { writeSecretStoreEntry } from "./secret-store.js";
@@ -246,7 +247,7 @@ describe("audience-scoped exec store snapshots", () => {
     ]);
   });
 
-  it("advisory delivers unassigned selected entries with a warning (warn-only soak)", () => {
+  it("advisory withholds unassigned selected entries and only warns (warn-and-withhold soak)", () => {
     const database = createDatabaseOptions();
     seed(database);
     const environment = readAssignedSecretStoreExecEnvironment({
@@ -255,11 +256,15 @@ describe("audience-scoped exec store snapshots", () => {
       config: configWith("advisory"),
       database,
     });
-    expect(environment.env?.UNASSIGNED_ENV_VAR).toBe("unassigned-env-value-1");
-    expect(environment.env?.GLOBAL_ENV_VAR).toBe("global-env-value-1");
+    // Advisory never broadens delivery: selected entries stay withheld from
+    // unassigned agents exactly as in off/enforce; only the warning differs.
+    expect(environment.env).toEqual({ GLOBAL_ENV_VAR: "global-env-value-1" });
+    expect(Object.keys(environment.secretSentinels ?? {})).toEqual(["GLOBAL_SECRET"]);
+    expect(JSON.stringify(environment)).not.toContain("unassigned-env-value-1");
+    expect(JSON.stringify(environment)).not.toContain("unassigned-secret-value-1");
   });
 
-  it("advisory with a missing assignment table keeps delivery", () => {
+  it("advisory keeps assigned selected delivery and withholds unassigned selected when the assignment table is missing", () => {
     const database = createDatabaseOptions();
     seed(database);
     const db = openOpenClawStateDatabase(database).db;
@@ -270,8 +275,8 @@ describe("audience-scoped exec store snapshots", () => {
       config: configWith("advisory"),
       database,
     });
-    expect(environment.env?.UNASSIGNED_ENV_VAR).toBe("unassigned-env-value-1");
-    expect(environment.env?.GLOBAL_ENV_VAR).toBe("global-env-value-1");
+    expect(environment.env).toEqual({ GLOBAL_ENV_VAR: "global-env-value-1" });
+    expect(Object.keys(environment.secretSentinels ?? {})).toEqual(["GLOBAL_SECRET"]);
   });
 
   it("enforce fails closed with a generic denial when agentId is absent", () => {
@@ -326,7 +331,7 @@ describe("audience-scoped exec store snapshots", () => {
     expect(
       resolveExecSnapshotAssignmentEnforcement({
         secrets: { agentAssignmentEnforcement: "yes" },
-      } as OpenClawConfig),
+      } as unknown as OpenClawConfig),
     ).toBe("off");
   });
 
@@ -403,5 +408,97 @@ describe("audience-scoped exec store snapshots", () => {
         allowedHosts: [],
       },
     ]);
+  });
+});
+
+describe("pre-effect authority revalidation", () => {
+  it("revalidation approves all-audience names and currently assigned selected names", () => {
+    const database = createDatabaseOptions();
+    seed(database);
+    const result = revalidateAssignedSecretNames({
+      names: ["GLOBAL_SECRET", "ASSIGNED_SECRET"],
+      agentId: "agent-a",
+      config: configWith("enforce"),
+      database,
+    });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("revalidation denies a selected name whose assignment was revoked, in enforce and advisory", () => {
+    const database = createDatabaseOptions();
+    seed(database);
+    // First prove the grant is live, then revoke it exactly as an operator
+    // unassign flow would, and confirm the next pre-effect check denies.
+    expect(
+      revalidateAssignedSecretNames({
+        names: ["ASSIGNED_SECRET"],
+        agentId: "agent-a",
+        config: configWith("enforce"),
+        database,
+      }),
+    ).toEqual({ ok: true });
+    const db = openOpenClawStateDatabase(database).db;
+    db.prepare("DELETE FROM agent_secret_assignments WHERE secret_name = 'ASSIGNED_SECRET'").run();
+    for (const mode of ["enforce", "advisory"] as const) {
+      const result = revalidateAssignedSecretNames({
+        names: ["ASSIGNED_SECRET", "GLOBAL_SECRET"],
+        agentId: "agent-a",
+        config: configWith(mode),
+        database,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toMatch(/no longer authorized/);
+      }
+    }
+  });
+
+  it("revalidation denies when the entry itself was deleted or narrowed after the snapshot", () => {
+    const database = createDatabaseOptions();
+    seed(database);
+    const db = openOpenClawStateDatabase(database).db;
+    db.prepare("DELETE FROM secret_store_entries WHERE name = 'ASSIGNED_SECRET'").run();
+    expect(
+      revalidateAssignedSecretNames({
+        names: ["ASSIGNED_SECRET"],
+        agentId: "agent-a",
+        config: configWith("enforce"),
+        database,
+      }).ok,
+    ).toBe(false);
+    // Narrowing a former all-audience entry to selected without assignment
+    // also revokes the retained grant.
+    db.prepare(
+      "UPDATE secret_store_entries SET audience = 'selected' WHERE name = 'GLOBAL_SECRET'",
+    ).run();
+    expect(
+      revalidateAssignedSecretNames({
+        names: ["GLOBAL_SECRET"],
+        agentId: "agent-a",
+        config: configWith("enforce"),
+        database,
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("revalidation stays permissive when enforcement is off or no bindings project", () => {
+    const database = createDatabaseOptions();
+    seed(database);
+    expect(
+      revalidateAssignedSecretNames({
+        names: ["ASSIGNED_SECRET"],
+        agentId: "agent-a",
+        config: configWith("off"),
+        database,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      revalidateAssignedSecretNames({
+        names: [],
+        agentId: undefined,
+        config: configWith("enforce"),
+        database,
+      }),
+    ).toEqual({ ok: true });
   });
 });

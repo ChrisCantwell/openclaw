@@ -38,10 +38,12 @@ import {
   getActiveSecretsRuntimeSnapshotState,
 } from "../../secrets/runtime-state.js";
 import {
-  deleteSecretStoreEntry,
-  getSecretStoreEntryMetadata,
   hasEffectiveAgentSecretAccess,
   listEffectiveAgentSecretNames,
+} from "../../secrets/store/secret-store-agent-access.js";
+import {
+  deleteSecretStoreEntry,
+  getSecretStoreEntryMetadata,
   listSecretStoreEntries,
   purgeExpiredSecretStoreEntries,
   SecretStoreValidationError,
@@ -680,6 +682,24 @@ export function createSecretsHandlers(params: {
         const agentId = client?.internal?.agentRuntimeIdentity?.agentId;
         if (agentId) {
           params.log?.debug?.(`secrets.store.delete requested by agent:${agentId}`);
+        }
+        // Destructive control-plane mutations are operator work. The fence
+        // reads the LIVE Gateway policy here, not a tool-construction-time
+        // snapshot, so a model-facing tool created while enforcement was off
+        // cannot delete after the operator enables any assignment mode.
+        if (agentId && params.configAccess.readAgentAssignmentEnforcement() !== "off") {
+          params.log?.debug?.(
+            `secrets.store.delete refused for agent runtime while enforcement is active`,
+          );
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              "delete is unavailable while agent assignment enforcement is enabled; ask the human operator to remove the store entry via CLI or Control UI.",
+            ),
+          );
+          return;
         }
         if (!createAgentRuntimeAuthorityGuard(client, context, respond).ensureActive()) {
           return;

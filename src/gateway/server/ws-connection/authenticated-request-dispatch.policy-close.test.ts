@@ -143,6 +143,10 @@ describe("policy writer response ownership", () => {
           reloadReference: async () => ({ reloaded: false }),
         },
         resolveSecrets: async () => ({ assignments: [], diagnostics: [], inactiveRefPaths: [] }),
+        configAccess: {
+          readAgentAssignmentEnforcement: () => "off",
+          writeAgentAssignmentEnforcement: async () => {},
+        },
       });
       runtime.handler.mockImplementation(async (options) => {
         await expectDefined(

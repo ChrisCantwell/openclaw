@@ -113,7 +113,7 @@ export function ensureSecretStoreSchema(database: DatabaseSync): void {
     }),
   ); // sqlite-allow-raw -- Canonical additive DDL only.
   ensureColumn(database, "secret_store_entries", "allowed_hosts TEXT");
-  ensureColumn(database, "secret_store_entries", "audience TEXT NOT NULL DEFAULT 'all'");
+  ensureColumn(database, "secret_store_entries", "audience TEXT");
 }
 
 /** Lazily install the additive metadata-only agent secret assignment table. */

@@ -875,9 +875,6 @@ enum class GatewayMethod(
   ProjectsRegister("projects.register"),
   ProjectsRemove("projects.remove"),
   WorkerDesktopLaunch("worker.desktop.launch"),
-  SecretsStoreList("secrets.store.list"),
-  SecretsStoreSet("secrets.store.set"),
-  SecretsStoreDelete("secrets.store.delete"),
   UsersPrefsGet("users.prefs.get"),
   UsersPrefsSet("users.prefs.set"),
   ProjectsAdd("projects.add"),
@@ -955,6 +952,14 @@ enum class GatewayMethod(
   PluginsCredentialsInspect("plugins.credentials.inspect"),
   PluginsSkillsRead("plugins.skills.read"),
   DiagnosticsHeapProfile("diagnostics.heapProfile"),
+  SecretsAssignmentsList("secrets.assignments.list"),
+  SecretsAssignmentsHas("secrets.assignments.has"),
+  SecretsAssignmentsEntry("secrets.assignments.entry"),
+  SecretsAssignmentsAdminList("secrets.assignments.admin.list"),
+  SecretsAssignmentsAdminAssign("secrets.assignments.admin.assign"),
+  SecretsAssignmentsAdminUnassign("secrets.assignments.admin.unassign"),
+  SecretsAssignmentsEnforcementGet("secrets.assignments.enforcement.get"),
+  SecretsAssignmentsEnforcementSet("secrets.assignments.enforcement.set"),
 }
 
 enum class GatewayEvent(

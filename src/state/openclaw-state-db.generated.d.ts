@@ -1172,7 +1172,7 @@ export interface SchemaMeta {
 
 export interface SecretStoreEntries {
   allowed_hosts: string | null;
-  audience: string;
+  audience: string | null;
   created_at_ms: number;
   deleted_at_ms: number | null;
   kind: string;

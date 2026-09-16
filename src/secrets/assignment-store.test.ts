@@ -140,7 +140,7 @@ describe("agent secret assignment store", () => {
     expect(
       hasAgentSecretAssignment({
         agentId: "bulk-agent",
-        secretName: assigned[total - 1],
+        secretName: assigned[total - 1] ?? "",
         database,
       }),
     ).toBe(true);
