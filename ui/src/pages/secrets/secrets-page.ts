@@ -331,9 +331,13 @@ class SecretsPage extends OpenClawLightDomElement {
     this.notice = null;
     this.formError = null;
     this.secretKindOverridden = false;
+    this.metadataOnlyEdit = false;
     this.draft = { name: "", value: "", kind: "env", audience: "all", allowedHosts: "" };
     this.dialogMode = "add";
   }
+
+  /** Editing an existing entry without retyping its protected value. */
+  private metadataOnlyEdit = false;
 
   private openEdit(entry: (typeof this.store.entries)[number]) {
     if (!this.canSet) {
@@ -342,9 +346,13 @@ class SecretsPage extends OpenClawLightDomElement {
     this.notice = null;
     this.formError = null;
     this.secretKindOverridden = true;
+    // Protected values are never disclosed back into the form; leaving the
+    // field empty lets the operator change audience/allowed hosts without
+    // re-entering the credential, preserving the stored value server-side.
+    this.metadataOnlyEdit = entry.kind === "secret";
     this.draft = {
       name: entry.name,
-      value: entry.kind === "env" ? entry.value : "",
+      ...(entry.kind === "env" ? { value: entry.value } : {}),
       kind: entry.kind,
       audience: entry.audience ?? "all",
       allowedHosts: entry.kind === "secret" ? (entry.allowedHosts ?? []).join("\n") : "",
@@ -356,6 +364,7 @@ class SecretsPage extends OpenClawLightDomElement {
     if (!this.store.busy) {
       this.dialogMode = null;
       this.formError = null;
+      this.metadataOnlyEdit = false;
     }
   }
 
@@ -390,7 +399,11 @@ class SecretsPage extends OpenClawLightDomElement {
     if (!ENV_SECRET_REF_ID_RE.test(this.draft.name)) {
       return t("secretsStore.badName");
     }
-    return this.validateValue(this.draft.value, this.draft.kind);
+    if (this.metadataOnlyEdit && this.draft.value === undefined) {
+      // Metadata-only: audience/allowed-hosts change preserves the stored value.
+      return null;
+    }
+    return this.validateValue(this.draft.value ?? "", this.draft.kind);
   }
 
   private submitDraft() {
@@ -548,7 +561,13 @@ class SecretsPage extends OpenClawLightDomElement {
       onOpenEdit: (entry) => this.openEdit(entry),
       onCloseDialog: () => this.closeDialog(),
       onDraftNameChange: (name) => this.changeDraftName(name),
-      onDraftValueChange: (value) => this.patchDraft({ value }),
+      onDraftValueChange: (value) => {
+        // Typing a value during a metadata-only edit means full replacement.
+        if (this.metadataOnlyEdit && value.length > 0) {
+          this.metadataOnlyEdit = false;
+        }
+        this.patchDraft({ value });
+      },
       onDraftAllowedHostsChange: (allowedHosts) => this.patchDraft({ allowedHosts }),
       onDraftKindChange: (kind) => {
         this.secretKindOverridden = true;

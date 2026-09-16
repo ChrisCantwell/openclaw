@@ -165,7 +165,10 @@ async function mutateAssignments(
   state.error = null;
   try {
     await mutate(client);
-    await loadAssignmentsAdmin(state, { append: false });
+    // Re-run the exhaustive pagination owner: a first-page-only refresh
+    // would drop legacy/deleted agent ids living beyond the presentation
+    // window until the operator manually loads more pages.
+    await loadAllAssignmentsAdmin(state);
     return true;
   } catch (error) {
     if (state.client === client) {

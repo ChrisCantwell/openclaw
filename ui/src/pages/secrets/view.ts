@@ -453,7 +453,8 @@ function renderEntryDialog(props: SecretsStoreViewProps): TemplateResult | typeo
             autocomplete="off"
             spellcheck="false"
             ?disabled=${props.busy}
-            .value=${props.draft.value}
+            placeholder=${editing ? t("secretsStore.valueMetadataOnly") : ""}
+            .value=${props.draft.value ?? ""}
             @input=${(event: Event) =>
               props.onDraftValueChange((event.currentTarget as HTMLTextAreaElement).value)}
           ></textarea>

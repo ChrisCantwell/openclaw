@@ -4922,6 +4922,7 @@ export const en: TranslationMap & {
     access: "Access",
     accessMode: "Access mode",
     value: "Value",
+    valueMetadataOnly: "Leave empty to keep the stored value and change only agent access.",
     allowedHosts: "Allowed hosts",
     allowedHostsPlaceholder: "api.example.com",
     allowedHostsHint:

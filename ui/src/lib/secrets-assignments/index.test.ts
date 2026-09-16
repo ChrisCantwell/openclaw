@@ -81,6 +81,30 @@ describe("assignments admin state", () => {
     expect(state.assignments).toEqual([{ agentId: "agent-a", names: ["ONE"] }]);
   });
 
+  it("unassign re-runs exhaustive pagination so a legacy id beyond page one survives", async () => {
+    // Full inventory: the legacy/deleted agent id lives on page three. After
+    // the mutation, the refresh must exhaust the cursor again — a first-page
+    // reload would drop agent-gone from the picker until manual paging.
+    const { request, snapshot } = clientWithResponses([
+      { ok: true }, // unassign mutation
+      // Post-mutation inventory: agent-a's group is gone; the legacy id
+      // still lives beyond the first page.
+      { assignments: [{ agentId: "agent-b", names: ["TWO"] }], nextCursor: "c1" },
+      { assignments: [{ agentId: "agent-gone", names: ["THREE"] }] },
+    ]);
+    const state = createInitialAssignmentsAdminState(snapshot);
+    expect(await unassignSecretName(state, "agent-a", "ONE")).toBe(true);
+    const methods = request.mock.calls.map(([method]) => method);
+    expect(methods[0]).toBe("secrets.assignments.admin.unassign");
+    // The refresh followed every page rather than stopping at the first.
+    expect(methods.filter((m) => m === "secrets.assignments.admin.list")).toHaveLength(2);
+    expect(state.assignments).toEqual([
+      { agentId: "agent-b", names: ["TWO"] },
+      { agentId: "agent-gone", names: ["THREE"] },
+    ]);
+    expect(state.nextCursor).toBeNull();
+  });
+
   it("unassign failure records the error and returns false", async () => {
     const { request, snapshot } = clientWithResponses([]);
     request.mockRejectedValueOnce(new Error("unassign refused"));
