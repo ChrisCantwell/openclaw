@@ -95,7 +95,8 @@ import {
   TALK_TEST_PROVIDER_API_KEY_PATH,
   TALK_TEST_PROVIDER_API_KEY_PATH_SEGMENTS,
 } from "../../test-utils/talk-test-provider.js";
-import { createSecretsHandlers, createSecretStoreWriteService } from "./secrets.js";
+import { createSecretStoreWriteService } from "./secrets-store-write-service.js";
+import { createSecretsHandlers } from "./secrets.js";
 
 async function invokeSecretsReload(params: {
   handlers: ReturnType<typeof createSecretsHandlers>;

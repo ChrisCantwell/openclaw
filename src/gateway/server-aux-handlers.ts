@@ -188,7 +188,8 @@ export function createGatewayAuxHandlers(
   });
   const loadSecretStoreWriteService = createLazyPromise(
     async () => {
-      const { createSecretStoreWriteService } = await loadSecretsModule();
+      const { createSecretStoreWriteService } =
+        await import("./server-methods/secrets-store-write-service.js");
       return createSecretStoreWriteService({ reloadSecrets, log: params.log });
     },
     { cacheRejections: true },

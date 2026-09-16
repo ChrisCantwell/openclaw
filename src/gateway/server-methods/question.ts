@@ -38,7 +38,7 @@ import {
   resolveSessionSharingTarget,
 } from "../session-sharing.js";
 import { resolveStoredSessionKeyForAgentStore } from "../session-store-key.js";
-import type { SecretStoreWriteService } from "./secrets.js";
+import type { SecretStoreWriteService } from "./secrets-store-write-service.js";
 import type { GatewayClient, GatewayRequestHandlers, RespondFn } from "./types.js";
 import { assertValidParams } from "./validation.js";
 

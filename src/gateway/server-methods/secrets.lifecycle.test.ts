@@ -23,7 +23,8 @@ import { createAgentRuntimeApprovalAuthorityValidator } from "../agent-runtime-i
 import { QuestionManager } from "../question-manager.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import { createQuestionHandlers } from "./question.js";
-import { createSecretsHandlers, createSecretStoreWriteService } from "./secrets.js";
+import { createSecretStoreWriteService } from "./secrets-store-write-service.js";
+import { createSecretsHandlers } from "./secrets.js";
 import type { GatewayClient, RespondFn } from "./types.js";
 
 afterEach(() => {

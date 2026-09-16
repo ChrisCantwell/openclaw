@@ -26,7 +26,6 @@ import {
   type SecretStoreEntry,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { formatErrorMessage as errorMessage } from "../../infra/errors.js";
-import { registerSecretValueForRedaction } from "../../logging/secret-redaction-registry.js";
 import {
   AgentSecretAssignmentValidationError,
   deleteAgentSecretAssignment,
@@ -34,28 +33,27 @@ import {
   writeAgentSecretAssignment,
 } from "../../secrets/assignment-store.js";
 import {
-  collectSecretStoreRefKeysInSnapshot,
-  getActiveSecretsRuntimeSnapshotState,
-} from "../../secrets/runtime-state.js";
-import {
   hasEffectiveAgentSecretAccess,
   listEffectiveAgentSecretNames,
 } from "../../secrets/store/secret-store-agent-access.js";
 import {
   deleteSecretStoreEntry,
-  updateSecretStoreAudience,
   getSecretStoreEntryMetadata,
   listSecretStoreEntries,
-  purgeExpiredSecretStoreEntries,
   SecretStoreValidationError,
   type SecretStoreEntryMetadata,
-  writeSecretStoreEntry,
 } from "../../secrets/store/secret-store.js";
 import { isKnownCoreSecretTargetId, isKnownSecretTargetId } from "../../secrets/target-registry.js";
 import { holdGatewayPolicyResponse } from "../server/ws-policy-close.js";
 import { createAgentRuntimeAuthorityGuard } from "./agent-runtime-authority.js";
 import { createEnforcementHandlers, type EnforcementConfigAccess } from "./enforcement-handlers.js";
-import type { GatewayClient, GatewayRequestHandlers } from "./types.js";
+import {
+  storeUpdatedBy,
+  type SecretStoreLogger,
+  type SecretStoreReload,
+  type SecretStoreWriteService,
+} from "./secrets-store-write-service.js";
+import type { GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
 const teamScope = { kind: "team" } as const;
@@ -111,93 +109,6 @@ function toProtocolStoreEntry(
   }
   return { ...metadata, kind: "secret", allowedHosts: entry.allowedHosts ?? [] };
 }
-
-function storeUpdatedBy(client: GatewayClient | null): string {
-  return (
-    client?.authenticatedUserProfile?.displayName?.trim() ||
-    client?.connect?.client?.displayName?.trim() ||
-    client?.connect?.client?.id?.trim() ||
-    "gateway"
-  );
-}
-
-type SecretStoreReload = (options?: {
-  forceColdRefKeys?: ReadonlySet<string>;
-  joinInFlight?: boolean;
-}) => Promise<{ warningCount: number }>;
-
-type SecretStoreLogger = {
-  warn?: (message: string) => void;
-  debug?: (message: string) => void;
-};
-
-/** Owns redaction-first store writes and the runtime refresh shared by Gateway RPCs. */
-export function createSecretStoreWriteService(params: {
-  reloadSecrets: SecretStoreReload;
-  log?: SecretStoreLogger;
-}) {
-  const purgeRetention = () => {
-    try {
-      purgeExpiredSecretStoreEntries();
-    } catch (error) {
-      params.log?.warn?.(`secrets.store retention purge failed: ${errorMessage(error)}`);
-    }
-  };
-  const reloadReference = async (
-    name: string,
-  ): Promise<{ reloaded: boolean; warningCount?: number }> => {
-    purgeRetention();
-    const snapshot = getActiveSecretsRuntimeSnapshotState();
-    const refKeys = snapshot
-      ? collectSecretStoreRefKeysInSnapshot(snapshot, name)
-      : new Set<string>();
-    if (refKeys.size === 0) {
-      return { reloaded: false };
-    }
-    // Explicit replacement must cold-refresh affected owners instead of
-    // retaining an older credential from the active runtime snapshot.
-    try {
-      const reload = await params.reloadSecrets({ forceColdRefKeys: refKeys, joinInFlight: false });
-      return { reloaded: true, warningCount: reload.warningCount };
-    } catch (error) {
-      params.log?.warn?.(`secrets.store runtime refresh failed: ${errorMessage(error)}`);
-      throw error;
-    }
-  };
-
-  return {
-    resolveUpdatedBy: storeUpdatedBy,
-    reloadReference,
-    write(
-      input: Omit<Parameters<typeof writeSecretStoreEntry>[0], "scope" | "database"> & {
-        /** Omitted value performs a metadata-only update preserving the stored value. */
-        value?: string;
-      },
-    ) {
-      if (input.value === undefined) {
-        if (input.audience === undefined) {
-          throw new SecretStoreValidationError(
-            "SECRET_STORE_VALUE_EMPTY",
-            "A store write must supply a value, or an audience for a metadata-only edit of an existing entry.",
-          );
-        }
-        updateSecretStoreAudience({
-          scope: teamScope,
-          name: input.name,
-          audience: input.audience,
-          updatedBy: input.updatedBy,
-        });
-        return;
-      }
-      // Registration precedes validation and SQLite so even write failures
-      // cannot disclose the submitted credential through downstream logging.
-      registerSecretValueForRedaction(input.value);
-      writeSecretStoreEntry({ scope: teamScope, ...input, value: input.value });
-    },
-  };
-}
-
-export type SecretStoreWriteService = ReturnType<typeof createSecretStoreWriteService>;
 
 function invalidSecretsResolveField(
   errors: ValidationError[] | null | undefined,

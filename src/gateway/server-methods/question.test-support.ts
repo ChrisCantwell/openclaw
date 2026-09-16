@@ -14,7 +14,7 @@ import { QuestionManager } from "../question-manager.js";
 import type { GatewayBroadcastFn } from "../server-broadcast-types.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import { createQuestionHandlers } from "./question.js";
-import { createSecretStoreWriteService } from "./secrets.js";
+import { createSecretStoreWriteService } from "./secrets-store-write-service.js";
 import type { GatewayClient, RespondFn } from "./types.js";
 
 export let manager: QuestionManager;

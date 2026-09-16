@@ -677,7 +677,7 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   // Plugin skill reads append without shifting previously advertised method indices.
   ["plugins.skills.read", "plugins", "operator.read", "2026.9"],
   ["diagnostics.heapProfile", "diagnostics", "operator.admin", "2026.9"],
-  // Secrets assignment rows: discovery is read-only and self-scoped by authenticated runtime identity; admin rows take an explicit agentId.
+  // Secrets assignment rows (agent-scoped audiences).
   ["secrets.assignments.list", null, "operator.admin", "2026.9"],
   ["secrets.assignments.has", null, "operator.admin", "2026.9"],
   ["secrets.assignments.entry", null, "operator.admin", "2026.9"],
