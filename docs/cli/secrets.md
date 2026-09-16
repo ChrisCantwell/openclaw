@@ -14,6 +14,8 @@ Manage SecretRefs and keep the active runtime snapshot healthy.
 
 | Command     | Role                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `assign`    | Assigns a metadata-only secret name to one agent; accepts no secret value                                                                                                                    |
+| `unassign`  | Removes one agent's metadata-only secret-name assignment                                                                                                                                     |
 | `reload`    | Gateway RPC (`secrets.reload`): re-resolves refs and atomically publishes the owner-aware runtime snapshot (no config writes); eligible owner failures may publish as cold or stale warnings |
 | `store`     | Manages team-scoped secret and environment values in the local shared state SQLite database                                                                                                  |
 | `audit`     | Read-only scan of config/auth/generated-model stores and legacy residues for plaintext, unresolved refs, and precedence drift (exec refs skipped unless `--allow-exec`)                      |
@@ -42,6 +44,29 @@ Exit codes for CI/gates:
 
 Related: [Secrets Management](/gateway/secrets) · [1Password plugin](/plugins/onepassword) · [SecretRef Credential Surface](/reference/secretref-credential-surface) · [Security](/gateway/security)
 
+## Agent assignments
+
+Operators assign only names and optional provider hints. Assignment records never
+contain secret values and do not copy or resolve provider data. Agent IDs accept only
+ASCII letters, numbers, underscores, and hyphens; names use the shared uppercase
+environment-variable grammar.
+
+```bash
+openclaw secrets assign DUMMY_API_KEY --agent build-agent --provider example-provider
+openclaw secrets unassign DUMMY_API_KEY --agent build-agent --yes
+```
+
+The model-facing `secrets` tool can list or check only the authenticated runtime
+agent's assignments. While assignment enforcement is active, exec store
+projection differs by mode: under `enforce` it includes only assigned entries
+and fails closed when the agent has no valid identity or no assignments, while
+under `advisory` every team entry still projects and each unassigned entry is
+logged as a warning. SecretRef resolution and the existing egress destination
+policy remain authoritative at use time.
+A linked Control UI follow-up will expose the same assign/unassign and
+enforcement-mode administration for authenticated operators (`operator.admin`).
+Until then, this CLI is the supported administration surface.
+
 ## Shared secret store
 
 `openclaw secrets store` writes directly to the local shared state database. The store is Gateway-wide and team-scoped, and `--scope team` is the only accepted value. `--scope me` exits `2` with `Identity scope is not supported yet; use --scope team.`
@@ -62,6 +87,7 @@ Naming and value rules:
 - Values are limited to 64 KiB (65,536 UTF-8 bytes). An oversized value exits `2` whether it arrives from stdin, `--value`, or `--value-file`.
 - A `secret` entry may not be empty, because an empty credential cannot be diagnosed later. `get` refuses secret kinds, and listings mask them. `env` entries may be empty.
 - `--kind secret|env` overrides automatic kind detection. Otherwise names ending in a common credential suffix such as `_API_KEY`, `_TOKEN`, `_PASSWORD`, `_PRIVATE_KEY`, or `_SECRET` become `secret`, and other names become `env`.
+- `--audience all|selected` sets agent access independently of value protection. `all` (default) keeps legacy team-wide delivery to every valid agent; `selected` restricts delivery to agents explicitly bound with `openclaw secrets assign`. Existing entries predate the flag and behave as `all`.
 
 ### Set values safely
 

@@ -103,8 +103,23 @@ function storedRequestGateway(readMetadata: () => Promise<unknown>) {
     if (method === "question.request") {
       return { id: params.id };
     }
-    if (method === "secrets.store.list") {
-      return await readMetadata();
+    if (method === "secrets.assignments.entry") {
+      // One name-scoped metadata read; never the store inventory. Env values
+      // are stripped server-side, mirroring the value-free protocol result.
+      expect(params).toEqual({ name: "SERVICE_API_KEY" });
+      const metadata = await readMetadata();
+      const entries = (metadata as { entries: Array<Record<string, unknown>> }).entries;
+      const found = entries.find((entry) => entry.name === "SERVICE_API_KEY") ?? null;
+      if (!found) {
+        return { entry: null };
+      }
+      // Server-side mapping strips env values only; a secret entry carrying a
+      // value field stays structurally invalid and fails validation.
+      if (found.kind === "env") {
+        const { value: _stripped, ...metadataOnly } = found;
+        return { entry: metadataOnly };
+      }
+      return { entry: found };
     }
     return storedAnswer;
   });
@@ -236,8 +251,8 @@ describe("secrets tool", () => {
           finishWait = resolve;
         });
       }
-      if (method === "secrets.store.list") {
-        return { entries: [unrelatedEnv, secretEntry] };
+      if (method === "secrets.assignments.entry") {
+        return { entry: secretEntry };
       }
       throw new Error(`unexpected method ${method}`);
     });
@@ -298,9 +313,14 @@ describe("secrets tool", () => {
     expect(gateway.mock.mock.calls.map(([method]) => method)).toEqual([
       "question.request",
       "question.waitAnswer",
-      "secrets.store.list",
+      "secrets.assignments.entry",
     ]);
-    expect(gateway.mock).toHaveBeenLastCalledWith("secrets.store.list", {}, {}, undefined);
+    expect(gateway.mock).toHaveBeenLastCalledWith(
+      "secrets.assignments.entry",
+      {},
+      { name: "SERVICE_API_KEY" },
+      { requireAgentRuntimeIdentity: true },
+    );
     expect(gateway.mock).toHaveBeenCalledWith(
       "question.request",
       {},
@@ -346,9 +366,9 @@ describe("secrets tool", () => {
       }).execute(`call-${status}`, { action: "request", name: "SERVICE_API_KEY", kind: "secret" });
 
       expect(result.details).toEqual({ status: "no_answer" });
-      expect(gateway.mock.mock.calls.some(([method]) => method === "secrets.store.list")).toBe(
-        false,
-      );
+      expect(
+        gateway.mock.mock.calls.some(([method]) => method === "secrets.assignments.entry"),
+      ).toBe(false);
       if (status === "pending") {
         expect(gateway.mock).toHaveBeenCalledWith(
           "question.resolve",
@@ -403,8 +423,8 @@ describe("secrets tool", () => {
           }
           throw terminal;
         }
-        if (method === "secrets.store.list") {
-          return { entries: [secretEntry] };
+        if (method === "secrets.assignments.entry") {
+          return { entry: secretEntry };
         }
         waitCalls += 1;
         if (waitCalls === 1) {
@@ -437,7 +457,7 @@ describe("secrets tool", () => {
           });
         }
         expect(
-          gateway.mock.mock.calls.filter(([method]) => method === "secrets.store.list"),
+          gateway.mock.mock.calls.filter(([method]) => method === "secrets.assignments.entry"),
         ).toHaveLength(!abort && marker === "stored" ? 1 : 0);
         expect(
           gateway.mock.mock.calls.filter(([method]) => method === "question.resolve"),
@@ -520,7 +540,7 @@ describe("secrets tool", () => {
     expect(gateway.mock.mock.calls.map(([method]) => method)).toEqual([
       "question.request",
       "question.waitAnswer",
-      "secrets.store.list",
+      "secrets.assignments.entry",
     ]);
     const text = result.content[0];
     expect(text?.type).toBe("text");
@@ -555,15 +575,15 @@ describe("secrets tool", () => {
         );
       try {
         await vi.waitFor(() =>
-          expect(gateway.mock.mock.calls.some(([method]) => method === "secrets.store.list")).toBe(
-            true,
-          ),
+          expect(
+            gateway.mock.mock.calls.some(([method]) => method === "secrets.assignments.entry"),
+          ).toBe(true),
         );
         expect(gateway.mock).toHaveBeenLastCalledWith(
-          "secrets.store.list",
+          "secrets.assignments.entry",
           {},
-          {},
-          { signal: controller.signal },
+          { name: "SERVICE_API_KEY" },
+          { requireAgentRuntimeIdentity: true, signal: controller.signal },
         );
         controller.abort(new Error("run stopped during metadata"));
         if (settlement === "reject") {
@@ -702,9 +722,9 @@ describe("secrets tool", () => {
         expect(
           gateway.mock.mock.calls.filter(([method]) => method === "question.request"),
         ).toHaveLength(1);
-        expect(gateway.mock.mock.calls.some(([method]) => method === "secrets.store.list")).toBe(
-          false,
-        );
+        expect(
+          gateway.mock.mock.calls.some(([method]) => method === "secrets.assignments.entry"),
+        ).toBe(false);
         expect(
           reserveAskUserPromptDelivery({
             toolCallId: "call-after-registration",
@@ -777,9 +797,9 @@ describe("secrets tool", () => {
         expect(gateway.mock.mock.calls.some(([method]) => method === "question.resolve")).toBe(
           false,
         );
-        expect(gateway.mock.mock.calls.some(([method]) => method === "secrets.store.list")).toBe(
-          false,
-        );
+        expect(
+          gateway.mock.mock.calls.some(([method]) => method === "secrets.assignments.entry"),
+        ).toBe(false);
         expect(
           reserveAskUserPromptDelivery({
             toolCallId: "call-after-refusal",
@@ -816,8 +836,8 @@ describe("secrets tool", () => {
           finishWait = resolve;
         });
       }
-      if (method === "secrets.store.list") {
-        return { entries: [unrelatedEnv, secretEntry] };
+      if (method === "secrets.assignments.entry") {
+        return { entry: secretEntry };
       }
       throw new Error(`unexpected method ${method}`);
     });
@@ -852,8 +872,8 @@ describe("secrets tool", () => {
           finishWait = resolve;
         });
       }
-      if (method === "secrets.store.list") {
-        return { entries: [unrelatedEnv, secretEntry] };
+      if (method === "secrets.assignments.entry") {
+        return { entry: secretEntry };
       }
       throw new Error(`unexpected method ${method}`);
     });
@@ -897,7 +917,7 @@ describe("secrets tool", () => {
           finishWait = resolve;
         });
       }
-      if (method === "secrets.store.list") {
+      if (method === "secrets.assignments.entry") {
         metadataStarted.resolve();
         return metadata.promise;
       }
@@ -972,6 +992,7 @@ describe("secrets tool", () => {
       {
         name: "SERVICE_API_KEY",
         kind: "secret",
+        audience: "selected",
         allowedHosts: ["api.example.test"],
         createdAtMs: 0,
         updatedAtMs: 0,
@@ -982,7 +1003,8 @@ describe("secrets tool", () => {
       {
         name: "SERVICE_MODE",
         kind: "env",
-        value: "preview-value",
+        value: "<redacted>",
+        audience: "all",
         createdAtMs: 0,
         updatedAtMs: 0,
         scopeKind: "team",
@@ -999,9 +1021,11 @@ describe("secrets tool", () => {
     expect(result.content[0]).toMatchObject({
       text: expect.stringContaining("SERVICE_API_KEY | secret | hosts: api.example.test"),
     });
+    // Env values are never rendered into model-visible output.
     expect(result.content[0]).toMatchObject({
-      text: expect.stringContaining("value: preview-value"),
+      text: expect.stringContaining("value: <redacted — set via CLI or Settings>"),
     });
+    expect(JSON.stringify(result)).not.toContain("preview-value");
     expect(gateway.mock).toHaveBeenCalledWith("secrets.store.list", {}, {}, undefined);
   });
 
@@ -1019,6 +1043,60 @@ describe("secrets tool", () => {
       {},
       { name: "SERVICE_API_KEY" },
       { requireAgentRuntimeIdentity: true },
+    );
+  });
+
+  it("lists only assigned names through the runtime-authorized metadata RPC", async () => {
+    const gateway = gatewayStub(async (method) => {
+      expect(method).toBe("secrets.assignments.list");
+      return { names: ["DUMMY_API_KEY", "DUMMY_TOKEN"], total: 2, truncated: false };
+    });
+
+    const result = await createSecretsTool({
+      agentId: "Dummy-Agent",
+      gatewayCall: gateway.call,
+    }).execute("call-assignment-list", { action: "list_assigned_secret_names" });
+
+    expect(result.details).toEqual({
+      status: "ok",
+      agentId: "dummy-agent",
+      names: ["DUMMY_API_KEY", "DUMMY_TOKEN"],
+      count: 2,
+      total: 2,
+      truncated: false,
+    });
+    expect(gateway.mock).toHaveBeenCalledWith(
+      "secrets.assignments.list",
+      {},
+      {},
+      { requireAgentRuntimeIdentity: true },
+    );
+    expect(JSON.stringify(result)).not.toContain("provider");
+    expect(
+      Value.Check(createSecretsTool({ agentId: "dummy-agent" }).parameters, {
+        action: "list_assigned_secret_names",
+        agentId: "other-agent",
+      }),
+    ).toBe(false);
+  });
+
+  it("checks one assigned name without accepting invalid names or returning provider detail", async () => {
+    const gateway = gatewayStub(async () => ({ assigned: false }));
+    const tool = createSecretsTool({ agentId: "dummy-agent", gatewayCall: gateway.call });
+
+    const result = await tool.execute("call-assignment-has", {
+      action: "has_secret",
+      name: "DUMMY_API_KEY",
+    });
+    expect(result.details).toEqual({ status: "ok", name: "DUMMY_API_KEY", assigned: false });
+    expect(gateway.mock).toHaveBeenCalledWith(
+      "secrets.assignments.has",
+      {},
+      { name: "DUMMY_API_KEY" },
+      { requireAgentRuntimeIdentity: true },
+    );
+    expect(Value.Check(tool.parameters, { action: "has_secret", name: "../DUMMY_API_KEY" })).toBe(
+      false,
     );
   });
 });

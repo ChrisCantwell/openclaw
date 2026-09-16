@@ -2,6 +2,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTempDirTracker } from "../../test/helpers/temp-dir.js";
 import { withInstallationTarget } from "../infra/installation-target-context.js";
+import { writeAgentSecretAssignment } from "../secrets/assignment-store.js";
 import { looksLikeSecretSentinel, resolveSecretSentinel } from "../secrets/sentinel.js";
 import { writeSecretStoreEntry } from "../secrets/store/secret-store.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
@@ -268,6 +269,139 @@ describe("exec store environment", () => {
     mocks.proxyBindings.length = 0;
   });
 
+  it("enforce routes runtime agent identity into assignment filtering (tool path)", async () => {
+    // Real construction layer: createExecTool derives agentId from its own
+    // sessionKey; no direct low-level helper call is involved.
+    await withTeamStoreEntries(
+      [
+        {
+          name: "AGENT_A_VAR",
+          value: "a-only-value",
+          kind: "env",
+          audience: "selected",
+          updatedBy: "test",
+        },
+        {
+          name: "SHARED_OFF_VAR",
+          value: "unassigned-value",
+          kind: "env",
+          audience: "selected",
+          updatedBy: "test",
+        },
+      ],
+      async () => {
+        const database = {
+          path: `${process.env.OPENCLAW_STATE_DIR}/state/openclaw.sqlite`,
+        } as const;
+        writeAgentSecretAssignment({
+          agentId: "agent-a",
+          secretName: "AGENT_A_VAR",
+          assignedBy: "test",
+          database,
+        });
+        const config = {
+          secrets: { agentAssignmentEnforcement: "enforce" },
+        } as Parameters<typeof createExecTool>[0] extends infer D
+          ? D extends { config?: infer C }
+            ? C
+            : never
+          : never;
+        const toolA = createExecTool({
+          host: "gateway",
+          security: "full",
+          ask: "off",
+          cwd: process.cwd(),
+          sessionKey: "agent:agent-a:main",
+          config,
+          operationalRunInstance: { instanceId: "instance-1", runId: "run-a" },
+        });
+        await toolA.execute("tool-path-a", { command: "echo ok", yieldMs: 120_000 });
+        const envA = mocks.gatewayParams.at(-1)?.env ?? {};
+        expect(envA.AGENT_A_VAR).toBe("a-only-value");
+        expect(envA).not.toHaveProperty("SHARED_OFF_VAR");
+        expect(envA.OPENCLAW_STATE_DIR).toBe(process.env.OPENCLAW_STATE_DIR);
+
+        const toolB = createExecTool({
+          host: "gateway",
+          security: "full",
+          ask: "off",
+          cwd: process.cwd(),
+          sessionKey: "agent:agent-b:main",
+          config,
+          operationalRunInstance: { instanceId: "instance-2", runId: "run-b" },
+        });
+        await toolB.execute("tool-path-b", { command: "echo ok", yieldMs: 120_000 });
+        const envB = mocks.gatewayParams.at(-1)?.env ?? {};
+        expect(envB).not.toHaveProperty("AGENT_A_VAR");
+        expect(envB).not.toHaveProperty("SHARED_OFF_VAR");
+        // Agent-b's own captured call (last entry) carries no agent-a assignment,
+        // in env or requestedEnv. Earlier entries belong to agent-a by design.
+        const callB = mocks.gatewayParams.at(-1) ?? {};
+        expect(JSON.stringify(callB)).not.toContain("a-only-value");
+        expect(JSON.stringify(callB)).not.toContain("AGENT_A_VAR");
+      },
+    );
+  });
+
+  it("subagent session keys derive their own agentId through the exec tool", async () => {
+    await withTeamStoreEntries(
+      [
+        {
+          name: "PARENT_ONLY_VAR",
+          value: "parent-value",
+          kind: "env",
+          audience: "selected",
+          updatedBy: "test",
+        },
+      ],
+      async () => {
+        const database = {
+          path: `${process.env.OPENCLAW_STATE_DIR}/state/openclaw.sqlite`,
+        } as const;
+        writeAgentSecretAssignment({
+          agentId: "agent-a",
+          secretName: "PARENT_ONLY_VAR",
+          assignedBy: "test",
+          database,
+        });
+        const config = {
+          secrets: { agentAssignmentEnforcement: "enforce" },
+        } as Parameters<typeof createExecTool>[0] extends infer D
+          ? D extends { config?: infer C }
+            ? C
+            : never
+          : never;
+        // A subagent session key under the parent agent: same derived agentId,
+        // so the assignment applies; a different agent's key sees nothing.
+        const subagentTool = createExecTool({
+          host: "gateway",
+          security: "full",
+          ask: "off",
+          cwd: process.cwd(),
+          sessionKey: "agent:agent-a:subagent:child-1",
+          config,
+          operationalRunInstance: { instanceId: "instance-3", runId: "run-sub" },
+        });
+        await subagentTool.execute("tool-path-sub", { command: "echo ok", yieldMs: 120_000 });
+        const envSub = mocks.gatewayParams.at(-1)?.env ?? {};
+        expect(envSub.PARENT_ONLY_VAR).toBe("parent-value");
+
+        const otherTool = createExecTool({
+          host: "gateway",
+          security: "full",
+          ask: "off",
+          cwd: process.cwd(),
+          sessionKey: "agent:agent-b:subagent:child-1",
+          config,
+          operationalRunInstance: { instanceId: "instance-4", runId: "run-sub-b" },
+        });
+        await otherTool.execute("tool-path-sub-b", { command: "echo ok", yieldMs: 120_000 });
+        const envOther = mocks.gatewayParams.at(-1)?.env ?? {};
+        expect(envOther).not.toHaveProperty("PARENT_ONLY_VAR");
+      },
+    );
+  });
+
   it("adds only team env-kind entries to gateway exec subprocesses", async () => {
     await withTeamStoreEntries(
       [
@@ -518,4 +652,89 @@ describe("exec store environment", () => {
       );
     },
   );
+  it("enforce filters secret sentinels and egress bindings through the real exec tool", async () => {
+    await withTeamStoreEntries(
+      [
+        {
+          name: "AGENT_A_ENV",
+          value: "a-env-value",
+          kind: "env",
+          audience: "selected",
+          updatedBy: "test",
+        },
+        {
+          name: "AGENT_A_SECRET",
+          value: "a-secret-value",
+          kind: "secret",
+          audience: "selected",
+          allowedHosts: ["api.agent-a.test"],
+          updatedBy: "test",
+        },
+        {
+          name: "UNASSIGNED_SECRET",
+          value: "unassigned-secret-value",
+          kind: "secret",
+          audience: "selected",
+          allowedHosts: ["api.unassigned.test"],
+          updatedBy: "test",
+        },
+      ],
+      async () => {
+        const database = {
+          path: `${process.env.OPENCLAW_STATE_DIR}/state/openclaw.sqlite`,
+        } as const;
+        writeAgentSecretAssignment({
+          agentId: "agent-a",
+          secretName: "AGENT_A_ENV",
+          assignedBy: "test",
+          database,
+        });
+        writeAgentSecretAssignment({
+          agentId: "agent-a",
+          secretName: "AGENT_A_SECRET",
+          assignedBy: "test",
+          database,
+        });
+        const config = {
+          secrets: { agentAssignmentEnforcement: "enforce" },
+        } as Parameters<typeof createExecTool>[0] extends infer D
+          ? D extends { config?: infer C }
+            ? C
+            : never
+          : never;
+        // Secret sentinels are egress-time: they project only while the
+        // secret egress proxy is active for the run.
+        mocks.egressActive = true;
+        vi.stubEnv("OPENCLAW_SECRET_SENTINELS", "gateway");
+        const tool = createExecTool({
+          host: "gateway",
+          security: "full",
+          ask: "off",
+          cwd: process.cwd(),
+          sessionKey: "agent:agent-a:main",
+          config,
+          operationalRunInstance: { instanceId: "instance-5", runId: "run-sentinel" },
+        });
+        await tool.execute("tool-path-sentinel", { command: "echo ok", yieldMs: 120_000 });
+        const env = mocks.gatewayParams.at(-1)?.env ?? {};
+        expect(env.AGENT_A_ENV).toBe("a-env-value");
+        // Assigned protected secret arrives only as an opaque sentinel.
+        expect(looksLikeSecretSentinel(env.AGENT_A_SECRET ?? "")).toBe(true);
+        expect(resolveSecretSentinel(env.AGENT_A_SECRET ?? "")).toBe("a-secret-value");
+        // The assigned binding keeps its egress host list.
+        expect(mocks.proxyBindings.at(-1)).toEqual([
+          expect.objectContaining({
+            name: "AGENT_A_SECRET",
+            allowedHosts: ["api.agent-a.test"],
+            sentinel: env.AGENT_A_SECRET,
+          }),
+        ]);
+        // Unassigned protected secret never projects, even by exact name.
+        expect(env).not.toHaveProperty("UNASSIGNED_SECRET");
+        const call = JSON.stringify(mocks.gatewayParams.at(-1) ?? {});
+        expect(call).not.toContain("unassigned-secret-value");
+        expect(call).not.toContain("UNASSIGNED_SECRET");
+      },
+    );
+  });
 });

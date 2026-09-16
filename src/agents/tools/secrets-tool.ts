@@ -1,16 +1,22 @@
+import { isValidAgentId, normalizeAgentIdStrict } from "@openclaw/normalization-core/agent-id";
 import { asNullableRecord, isRecord } from "@openclaw/normalization-core/record-coerce";
 import { Type } from "typebox";
 import { GatewayClientRequestError } from "../../../packages/gateway-client/src/request-error.js";
 import {
+  validateSecretsAssignmentsHasResult,
+  validateSecretsAssignmentsEntryResult,
+  validateSecretsAssignmentsListResult,
   validateSecretsStoreListResult,
   type QuestionRequestQuestion,
   type QuestionWaitAnswerResult,
+  type SecretsAssignmentsEntryResult,
   type SecretsStoreListResult,
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { ENV_SECRET_REF_ID_RE, type SecretRef } from "../../config/types.secrets.js";
 import { ADMIN_SCOPE } from "../../gateway/operator-scopes.js";
 import { resolveDefaultSecretProviderAlias } from "../../secrets/ref-contract.js";
+import { resolveAgentSecretAssignmentEnforcement } from "../../secrets/store/secret-store.js";
 import { isDeliverableMessageChannel } from "../../utils/message-channel-normalize.js";
 import { resolveAgentQuestionGatewayCall } from "../harness/gateway-question-dispatch.js";
 import { stringEnum } from "../schema/string-enum.js";
@@ -32,15 +38,16 @@ import { jsonResult, textResult } from "./tool-results.js";
 type SecretStoreKind = "secret";
 const SecretsToolSchema = Type.Object(
   {
-    action: stringEnum(["request", "list", "delete"], {
-      description: "`request` a value from the human, `list` entry metadata, or `delete` an entry.",
+    action: stringEnum(["request", "list", "delete", "list_assigned_secret_names", "has_secret"], {
+      description:
+        "Request, list, or delete shared-store entries; or discover only this agent's assigned secret names.",
     }),
     name: Type.Optional(
       Type.String({
         maxLength: 128,
         pattern: "^[A-Z][A-Z0-9_]{0,127}$",
         description:
-          "Entry name in uppercase environment-variable form, also its SecretRef id (STRIPE_API_KEY). Required for request and delete.",
+          "Entry name in uppercase environment-variable form, also its SecretRef id (STRIPE_API_KEY). Required for request, delete, and has_secret.",
       }),
     ),
     kind: Type.Optional(
@@ -165,32 +172,68 @@ async function fetchSecretStore(gatewayCall: GatewayQuestionCall, signal?: Abort
   return result;
 }
 
+/**
+ * Reads one entry's current metadata name-scoped. `secrets.assignments.entry`
+ * returns only this entry, never the unscoped store inventory, and never any
+ * value plaintext. For the exact requested name it does disclose metadata
+ * that reveals existence, kind, timestamps, updatedBy, and allowedHosts;
+ * unassigned names, host data beyond this entry, and values never cross.
+ */
+async function fetchStoredEntry(
+  gatewayCall: GatewayQuestionCall,
+  name: string,
+  signal?: AbortSignal,
+): Promise<SecretsAssignmentsEntryResult> {
+  const result = await gatewayCall(
+    "secrets.assignments.entry",
+    {},
+    { name },
+    { requireAgentRuntimeIdentity: true, ...(signal ? { signal } : {}) },
+  );
+  if (!validateSecretsAssignmentsEntryResult(result)) {
+    throw new Error("secrets.assignments.entry returned invalid metadata");
+  }
+  return result;
+}
+
+/** Bounded post-write policy truth: complete host list or only its count. */
+function storedEntryPolicyFromResult(result: SecretsAssignmentsEntryResult): StoredEntryPolicy {
+  const entry = result.entry;
+  if (!entry) {
+    return { status: "missing" };
+  }
+  if (entry.kind !== "secret") {
+    return { status: "kind_changed" };
+  }
+  const allowedHosts = entry.allowedHosts;
+  if (allowedHosts === undefined) {
+    return { status: "unavailable" };
+  }
+  return JSON.stringify(allowedHosts).length > STORED_POLICY_JSON_MAX_CHARS
+    ? { status: "omitted", allowedHostCount: allowedHosts.length }
+    : { status: "available", allowedHosts };
+}
+
+const STORED_POLICY_JSON_MAX_CHARS = 512;
+
+type StoredEntryPolicy =
+  | { status: "missing" }
+  | { status: "kind_changed" }
+  | { status: "unavailable" }
+  | { status: "omitted"; allowedHostCount: number }
+  | { status: "available"; allowedHosts: string[] };
+
 async function storedSecretResult(
   params: NormalizedSecretsRequestParams,
   provider: string,
   gatewayCall: GatewayQuestionCall,
   signal?: AbortSignal,
 ) {
-  // This read observes current policy, not the earlier approval. Its failure
-  // cannot undo a committed save; never expose the inventory or read error.
-  const currentPolicy = await fetchSecretStore(gatewayCall, signal)
-    .then(({ entries }) => {
-      const entry = entries.find((candidate) => candidate.name === params.name);
-      if (!entry) {
-        return { status: "missing" as const };
-      }
-      if (entry.kind !== "secret") {
-        return { status: "kind_changed" as const };
-      }
-      const allowedHosts = entry.allowedHosts;
-      if (allowedHosts === undefined) {
-        return { status: "unavailable" as const };
-      }
-      // Return the complete policy or only its count, never a misleading prefix.
-      return JSON.stringify(allowedHosts).length > 512
-        ? { status: "omitted" as const, allowedHostCount: allowedHosts.length }
-        : { status: "available" as const, allowedHosts };
-    })
+  // The name-scoped entry read observes current policy, not the earlier
+  // approval. Its failure cannot undo a committed save; never expose the
+  // inventory or read error.
+  const currentPolicy = await fetchStoredEntry(gatewayCall, params.name, signal)
+    .then(storedEntryPolicyFromResult)
     .catch(() => ({ status: "unavailable" as const }));
   signal?.throwIfAborted();
 
@@ -212,13 +255,15 @@ async function storedSecretResult(
 }
 
 function listSecretStoreResult(result: SecretsStoreListResult) {
+  // Metadata-only for the agent surface: env entry values never render into
+  // model output. Values remain available through CLI and Control UI.
   const lines = result.entries.map((entry) => {
     const fields = [entry.name, entry.kind];
     if (entry.kind === "secret" && entry.allowedHosts?.length) {
       fields.push(`hosts: ${entry.allowedHosts.join(", ")}`);
     }
     if (entry.kind === "env") {
-      fields.push(`value: ${entry.value}`);
+      fields.push("value: <redacted — set via CLI or Settings>");
     }
     fields.push(`updated: ${new Date(entry.updatedAtMs).toISOString()}`);
     if (entry.updatedBy) {
@@ -226,7 +271,25 @@ function listSecretStoreResult(result: SecretsStoreListResult) {
     }
     return fields.join(" | ");
   });
-  return textResult(lines.length ? lines.join("\n") : "The secret store is empty.", result);
+  // Structured details are model-visible too: env values never leave this tool.
+  const redacted: SecretsStoreListResult = {
+    ...result,
+    entries: result.entries.map((entry) =>
+      entry.kind === "env" ? { ...entry, value: "<redacted>" } : entry,
+    ),
+  };
+  return textResult(lines.length ? lines.join("\n") : "The secret store is empty.", redacted);
+}
+
+function requireRuntimeAgentId(agentId: string | undefined): string {
+  if (!isValidAgentId(agentId)) {
+    throw new ToolInputError("assigned-secret discovery requires a valid runtime agent identity");
+  }
+  const normalized = normalizeAgentIdStrict(agentId);
+  if (!normalized.ok) {
+    throw new ToolInputError("assigned-secret discovery requires a valid runtime agent identity");
+  }
+  return normalized.value;
 }
 
 /** Creates the metadata-only secret-store tool and its human-entered write flow. */
@@ -260,10 +323,104 @@ export function createSecretsTool(params: {
       const input = args;
       const action = readToolStringParam(input, "action", { required: true });
       if (action === "list") {
+        const enforcement = resolveAgentSecretAssignmentEnforcement(
+          params.config?.secrets?.agentAssignmentEnforcement,
+        );
+        if (enforcement !== "off") {
+          // Under an active assignment policy the model-facing list is
+          // assignment-names-only: it never calls the identity-blind
+          // `secrets.store.list` RPC, so no unassigned name, host, timestamp,
+          // or env plaintext value ever reaches this tool before rendering.
+          // Human CLI/Control UI store listing is unchanged (operator/admin
+          // scope).
+          const result = await gatewayCall(
+            "secrets.assignments.list",
+            {},
+            {},
+            { requireAgentRuntimeIdentity: true, ...(signal ? { signal } : {}) },
+          );
+          if (!validateSecretsAssignmentsListResult(result)) {
+            throw new Error("secrets.assignments.list returned invalid metadata");
+          }
+          const truncationNote = result.truncated
+            ? `Showing the first ${result.names.length} of ${result.total} assigned names; the operator/admin inventory has the rest.`
+            : "";
+          return textResult(
+            [
+              truncationNote,
+              result.names.length
+                ? result.names.join("\n")
+                : "No secret names are assigned to this agent.",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+            {
+              status: "ok" as const,
+              action: "list" as const,
+              names: [...result.names],
+              total: result.total,
+              truncated: result.truncated,
+            },
+          );
+        }
+        // Policy off: legacy full-store listing. Not byte-identical legacy
+        // output — env values are still redacted (they never render into
+        // model output); values remain available through CLI and Control UI.
         return listSecretStoreResult(await fetchSecretStore(gatewayCall, signal));
+      }
+      if (action === "list_assigned_secret_names") {
+        const agentId = requireRuntimeAgentId(params.agentId);
+        const result = await gatewayCall(
+          "secrets.assignments.list",
+          {},
+          {},
+          { requireAgentRuntimeIdentity: true, ...(signal ? { signal } : {}) },
+        );
+        if (!validateSecretsAssignmentsListResult(result)) {
+          throw new Error("secrets.assignments.list returned invalid metadata");
+        }
+        return jsonResult({
+          status: "ok",
+          agentId,
+          names: result.names,
+          // Truthful bounded-window accounting: `count` prefers the full
+          // assignment total while `names` stays a presentation window; an
+          // exceeded window is disclosed, never silently hidden.
+          count: result.total,
+          total: result.total,
+          truncated: result.truncated,
+        });
+      }
+      if (action === "has_secret") {
+        const name = readSecretStoreName(input);
+        const result = await gatewayCall(
+          "secrets.assignments.has",
+          {},
+          { name },
+          { requireAgentRuntimeIdentity: true, ...(signal ? { signal } : {}) },
+        );
+        if (!validateSecretsAssignmentsHasResult(result)) {
+          throw new Error("secrets.assignments.has returned invalid metadata");
+        }
+        return jsonResult({ status: "ok", name, assigned: result.assigned });
       }
       if (action === "delete") {
         const name = readSecretStoreName(input);
+        const enforcement = resolveAgentSecretAssignmentEnforcement(
+          params.config?.secrets?.agentAssignmentEnforcement,
+        );
+        if (enforcement !== "off") {
+          // Destructive control-plane mutations are operator work. While any
+          // assignment policy is active (advisory soak included), model-facing
+          // delete is refused generically so a name-knowing agent cannot
+          // remove entries assigned only to another agent (or unset unassigned
+          // ones it merely knows about). Assignment-owning agents keep full
+          // USE of their secrets; operators keep CLI/Control UI delete.
+          return textResult(
+            "delete is unavailable while agent assignment enforcement is enabled; ask the human operator to remove the store entry via CLI or Control UI.",
+            { status: "refused" as const, action: "delete" as const },
+          );
+        }
         const result = await gatewayCall(
           "secrets.store.delete",
           {},

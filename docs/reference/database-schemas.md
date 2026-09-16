@@ -30,6 +30,10 @@ reader job. Open the page that matches your task and stay there.
 | [State schema history](/reference/database-schemas/state-schema-history)                       | Shared state database schema versions, their changes, and their first releases.                          |
 | [Integrity, troubleshooting, and recovery](/reference/database-schemas/integrity-and-recovery) | Integrity checks, common database errors, and the supported downgrade recovery path.                     |
 
+### Additive: `agent_secret_assignments`
+
+The `agent_secret_assignments` table is lazily installed on first write by `ensureAgentSecretAssignmentSchema`. It stores metadata-only bindings (agent ID → secret name) with no secret values. See [Database layout](/reference/database-schemas/layout).
+
 ## Related
 
 - [Backups](/install/backups) — archives, per-database snapshots, scheduling, and offsite copies for the databases described here

@@ -262,6 +262,9 @@ const AGENT_RUNTIME_IDENTITY_METHODS = new Set<string>([
   "cron.run",
   "cron.runs",
   "secrets.store.delete",
+  "secrets.assignments.list",
+  "secrets.assignments.has",
+  "secrets.assignments.entry",
 ]);
 
 const OPTIONAL_LOCAL_AGENT_RUNTIME_IDENTITY_METHODS = new Set<string>([

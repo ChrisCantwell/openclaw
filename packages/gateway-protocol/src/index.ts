@@ -58,6 +58,19 @@ export * from "./restart-unavailable.js";
 export type * from "./public-session-catalog.js";
 export * from "./validator-registry.js";
 export type {
+  SecretsAssignmentsHasParams,
+  SecretsAssignmentsHasResult,
+  SecretsAssignmentsListResult,
+  SecretsAssignmentsEntryParams,
+  SecretsAssignmentsEntryResult,
+  SecretsAssignmentsAdminListParams,
+  SecretsAssignmentsAdminListResult,
+  SecretsAssignmentsAdminAssignParams,
+  SecretsAssignmentsAdminUnassignParams,
+  SecretsAssignmentsAdminMutationResult,
+  SecretsAssignmentsEnforcementGetResult,
+  SecretsAssignmentsEnforcementSetParams,
+  SecretsAssignmentsEnforcementSetResult,
   SecretStoreEntry,
   SecretsStoreDeleteParams,
   SecretsStoreListResult,

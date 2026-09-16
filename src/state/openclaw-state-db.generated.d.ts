@@ -84,6 +84,14 @@ export interface AgentProvenance {
   creator_agent_id: string | null;
 }
 
+export interface AgentSecretAssignments {
+  agent_id: string;
+  assigned_by: string | null;
+  created_at_ms: number;
+  provider_hint: string | null;
+  secret_name: string;
+}
+
 export interface ApnsRegistrationTombstones {
   deleted_at_ms: number;
   node_id: string;
@@ -1164,6 +1172,7 @@ export interface SchemaMeta {
 
 export interface SecretStoreEntries {
   allowed_hosts: string | null;
+  audience: string;
   created_at_ms: number;
   deleted_at_ms: number | null;
   kind: string;
@@ -1741,6 +1750,7 @@ export interface DB {
   agent_databases: AgentDatabases;
   agent_deletion_journal: AgentDeletionJournal;
   agent_provenance: AgentProvenance;
+  agent_secret_assignments: AgentSecretAssignments;
   apns_registration_tombstones: ApnsRegistrationTombstones;
   apns_registrations: ApnsRegistrations;
   audit_events: AuditEvents;

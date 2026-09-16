@@ -531,6 +531,18 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   ["secrets.store.list", null, "operator.admin", "2026.8"],
   ["secrets.store.set", null, "operator.admin", "2026.8", CONTROL_PLANE_WRITE],
   ["secrets.store.delete", null, "operator.admin", "2026.8", CONTROL_PLANE_WRITE],
+  // Assignment discovery is read-only and self-scoped by authenticated runtime identity.
+  ["secrets.assignments.list", null, "operator.admin", "2026.9"],
+  ["secrets.assignments.has", null, "operator.admin", "2026.9"],
+  // Name-scoped single-entry metadata read for the post-request tool flow.
+  ["secrets.assignments.entry", null, "operator.admin", "2026.9"],
+  // Operator-admin assignment/enforcement administration (agentId is an
+  // explicit parameter; no runtime-identity derivation, no secret values).
+  ["secrets.assignments.admin.list", null, "operator.admin", "2026.9"],
+  ["secrets.assignments.admin.assign", null, "operator.admin", "2026.9", CONTROL_PLANE_WRITE],
+  ["secrets.assignments.admin.unassign", null, "operator.admin", "2026.9", CONTROL_PLANE_WRITE],
+  ["secrets.assignments.enforcement.get", null, "operator.admin", "2026.9"],
+  ["secrets.assignments.enforcement.set", null, "operator.admin", "2026.9", CONTROL_PLANE_WRITE],
   // Self-scoped preferences append so every older advertised index remains stable.
   ["users.prefs.get", "users", "operator.read", "2026.8"],
   ["users.prefs.set", "users", "operator.write", "2026.8"],

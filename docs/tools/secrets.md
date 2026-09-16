@@ -27,10 +27,19 @@ reason. For egress use, it proposes the exact destination hosts too.
 
 ## Actions
 
+- `list_assigned_secret_names` — list the secret names assigned to the current
+  runtime agent. The Gateway derives the agent ID from authenticated live runtime
+  identity; the call cannot select another agent. Results contain names, a
+  count equal to the full assignment total, and `total`/`truncated` disclosure
+  — never values or provider details. `names` is a presentation window of at
+  most 512 entries; authorization itself is never bounded by that window, and
+  `truncated: true` with `total` makes any remainder explicit.
+- `has_secret` — report whether one uppercase secret name is assigned to the current
+  runtime agent. Assigned and unassigned responses have the same metadata-only shape.
 - `request` — ask the human for a credential and store it under a name such as
-  `STRIPE_API_KEY`. Requests are protected-secret only: an `env` value is
-  readable through `list`, so requesting one would break the promise the masked
-  prompt makes. The agent may propose `allowedHosts` and a short `reason` shown
+  `STRIPE_API_KEY`. Requests are protected-secret only: an `env` value is set
+  in Settings or the CLI, not requested from the model. The agent may propose
+  `allowedHosts` and a short `reason` shown
   on the prompt, and the tool blocks until you answer, skip, or it times out
   (15 minutes by default, with `timeoutSeconds` clamped to 30–3600 seconds).
   This is a maximum human wait, subject to earlier cancellation or the overall
@@ -38,16 +47,29 @@ reason. For egress use, it proposes the exact destination hosts too.
   The request is bound to the requesting agent run. If
   that authority closes before you answer, the pending prompt is cancelled and
   the write is refused.
-- `list` — entry metadata: name, kind, allowed hosts, and last update. Secret
-  values are structurally absent from the listing. Operator-set `env` entries
-  show their value, since those are injected into exec environments anyway and
-  are agent-readable by design.
+- `list` — while assignment policy is active (`advisory` or `enforce`): only
+  the secret names assigned to the current runtime agent, derived from
+  authenticated live runtime identity; the call cannot select another agent and
+  never reads the unscoped team store. With policy `off`: shared-store entry
+  metadata — name, kind, allowed hosts, and last update. Env values are never
+  returned in any mode; they are redacted from text and structured output.
 - `delete` — soft-delete an entry by name. Deleted entries are purged after 30
-  days.
+  days. Refused while assignment policy is active (`advisory` or `enforce`);
+  operators delete via the CLI.
 
 There is deliberately no action that writes a value the agent supplies. If a
 value must enter the store, it arrives through the human prompt, the
 `/settings/secrets` page, or the [`openclaw secrets store` CLI](/cli/secrets).
+
+A `request` stores the entry but does not assign it to the requesting agent.
+While assignment enforcement is active, an operator must assign the name before
+that agent's exec runs can receive it. Use `openclaw secrets assign`; a linked
+Control UI follow-up will add equivalent assignment and enforcement controls.
+
+This tool's authorization is OpenClaw-level defense in depth over the supported
+secret paths. It is not OS isolation: an unsandboxed agent with same-user host
+access can still read state database, process, file, or upstream-vault material
+directly.
 
 ## Answering a request
 

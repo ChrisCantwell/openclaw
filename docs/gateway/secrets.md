@@ -32,6 +32,93 @@ Open the page that matches your task.
 | [Secrets integration examples](/gateway/secrets/integration-examples)            | Exec provider recipes for 1Password, Bitwarden, Vault, pass, and sops, plus MCP and sandbox SSH.             |
 | [Secrets operations and behavior](/gateway/secrets/operations)                   | Supported surfaces, precedence, activation triggers, degraded signals, and the audit and configure workflow. |
 
+### Agent secret assignment broker
+
+Gateway methods `secrets.assignments.list` and `secrets.assignments.has` let an
+authenticated agent discover which secret names it has been assigned — metadata
+only, no values. The CLI commands `openclaw secrets assign` and
+`openclaw secrets unassign` manage bindings. See
+[CLI: secrets](/cli/secrets#agent-assignments) and
+[Secrets operations](/gateway/secrets/operations).
+
+### Exec snapshot audience and enforcement
+
+Every secret-store entry carries an explicit, persisted audience that is
+orthogonal to value protection (kind). The audience decides which agents
+receive the entry through delivery paths; the off/advisory/enforce mode
+governs how denials behave for selected-audience entries:
+
+- `audience: "all"` (default, and the behavior of every entry that predates
+  the audience column): legacy team-wide delivery. Every valid agent receives
+  the entry on every current or future delivery path, regardless of
+  assignment rows.
+- `audience: "selected"`: only agents with an explicit
+  `agent_secret_assignments` row receive the entry. An empty assignment set
+  never implies global access, and invalid agent identities fail closed —
+  they never inherit the unscoped store.
+
+The automatic agent exec store snapshot honors this audience with
+`secrets.agentAssignmentEnforcement`:
+
+- `off` (default): all-audience entries keep full legacy delivery;
+  selected-audience entries still project only to their assigned agents
+  (unassigned ones are withheld silently).
+- `advisory`: same delivery decisions as `off`, but selected entries the
+  current agent is not assigned log a per-entry warning so operators can soak
+  before tightening.
+- `enforce`: additionally fails closed when no valid agent identity can be
+  derived — a missing or invalid identity yields a generic denial instead of
+  projecting the unscoped store. Enforcement honors the explicit audience:
+  it never converts an `all`-audience entry into assignment-only delivery.
+  Subagent sessions use their owning configured agent's identity and
+  therefore share that agent's assignments; they are not separate assignment
+  principals. An unsandboxed agent with same-user host access can still read
+  state database, process, file, or upstream-vault material directly: this is
+  supported-path OpenClaw authorization and defense in depth, not OS
+  isolation.
+
+A linked Control UI follow-up will await durable config persistence and then
+confirm the mode against the live runtime source with a bounded,
+condition-based wait before reporting success. If that wait expires without
+observing the expected mode, the UI will report failure with the authoritative
+post-attempt mode in a separate error callout, never as a success notice. A
+timeout will not imply rollback: the persist may still have landed, and the
+error callout's mode will be the source of truth.
+
+Agent identity is derived from authenticated runtime context inside the exec
+tool; it cannot be selected through model or tool arguments. Operator config
+materialization, CLI surfaces, and the operator-owned `createExecTool` callers
+(diagnostics, export-trajectory, and the auto-reply bash command) are
+unaffected. When a derived agent id is absent, `advisory` still delivers every
+entry (legacy behavior, warn-only soak); under `enforce`, however, a missing
+or invalid identity fails closed with a generic denial instead of projecting
+the unscoped store.
+
+The model-facing `secrets` tool `list` action never renders env entry values.
+When assignment policy is active (`advisory` or `enforce`), `list` returns only
+names accessible to the runtime agent — all-audience entries plus its
+selected-audience assignments — and does not call the identity-blind
+full-store listing; with policy `off` it lists store metadata with env values
+redacted (a presentation window, not an authorization bound). `request`
+stores an entry without assigning it, and its post-write policy read is
+name-scoped (`secrets.assignments.entry`): the tool process never receives
+the unscoped team store. `secrets.assignments.entry` is an exact-name read
+for live agent runtime identity — it is not assignment-scoped. By exact
+secret name it discloses store existence (entry vs null), entry kind,
+creation/update timestamps, `updatedBy`, the entry's `audience`, and the
+secret's `allowedHosts`; values never cross. This name-scoped disclosure is
+what lets `request` verify post-write host policy without assigning or
+listing. Under any policy, a selected-audience entry the agent is not
+assigned does not project into its exec environment; operators assign the
+name or widen the entry to `all` explicitly.
+Model-facing `delete` is refused while any assignment policy is active;
+operators use the CLI. A linked Control UI follow-up will expose assignment
+and enforcement administration without changing these backend boundaries.
+The operator-admin assignment RPCs (`secrets.assignments.admin.*`,
+`secrets.assignments.enforcement.*`) take explicit agent ids, never derive
+identity from runtime context, and carry no secret values; the model-facing
+self-only RPCs are unchanged.
+
 ## Where each section moved
 
 Every section, tab, step, and accordion title from the previous single-page

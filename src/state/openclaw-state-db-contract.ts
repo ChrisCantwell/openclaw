@@ -71,6 +71,7 @@ export const FIRST_USE_STATE_INDEXES = [
 export const LAZY_ADDITIVE_STATE_TABLES = [
   ...FIRST_USE_STATE_TABLES,
   "agent_provenance",
+  "agent_secret_assignments",
   "cron_run_receipts",
   "config_revision_keys",
   "secret_store_entries",

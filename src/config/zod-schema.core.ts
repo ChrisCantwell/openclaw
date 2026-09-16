@@ -165,6 +165,7 @@ export const SecretsConfigSchema = z
       })
       .catchall(SecretProviderSchema)
       .optional(),
+    agentAssignmentEnforcement: z.enum(["off", "advisory", "enforce"]).optional(),
     defaults: z
       .object({
         env: z.string().regex(SECRET_PROVIDER_ALIAS_PATTERN).optional(),

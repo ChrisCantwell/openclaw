@@ -2662,8 +2662,20 @@ CREATE TABLE IF NOT EXISTS secret_store_entries (
   updated_by TEXT,
   deleted_at_ms INTEGER,
   allowed_hosts TEXT,
+  audience TEXT NOT NULL DEFAULT 'all' CHECK (audience IN ('all', 'selected')),
   CHECK ((scope_kind = 'team' AND scope_id = '') OR (scope_kind = 'identity' AND length(scope_id) > 0)),
   PRIMARY KEY (scope_kind, scope_id, name)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS secret_store_entries_live_idx
   ON secret_store_entries (scope_kind, scope_id, name) WHERE deleted_at_ms IS NULL;
+
+-- Metadata-only bindings used to disclose an agent's assigned secret names.
+-- Secret values remain owned by configured SecretRef providers and never enter this table.
+CREATE TABLE IF NOT EXISTS agent_secret_assignments (
+  agent_id TEXT NOT NULL,
+  secret_name TEXT NOT NULL,
+  provider_hint TEXT,
+  created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+  assigned_by TEXT,
+  PRIMARY KEY (agent_id, secret_name)
+) STRICT;

@@ -1,5 +1,6 @@
 /** Redaction policy surface: Git snapshots may omit these credential-bearing tables. */
 export const STATE_SECRET_TABLE_NAMES = [
+  "agent_secret_assignments",
   "audit_identity_keys",
   "apns_registrations",
   "channel_ingress_events",

@@ -198,6 +198,18 @@ describe("core gateway method release trains", () => {
     ]) {
       expect(methods.find((candidate) => candidate.name === method)?.since).toBe("2026.9");
     }
+    for (const method of [
+      "secrets.assignments.list",
+      "secrets.assignments.has",
+      "secrets.assignments.entry",
+      "secrets.assignments.admin.list",
+      "secrets.assignments.admin.assign",
+      "secrets.assignments.admin.unassign",
+      "secrets.assignments.enforcement.get",
+      "secrets.assignments.enforcement.set",
+    ]) {
+      expect(methods.find((candidate) => candidate.name === method)?.since).toBe("2026.9");
+    }
     expect(methods.find((method) => method.name === "update.hold")?.since).toBe("2026.8");
     expect(methods.find((method) => method.name === "sessions.catalog.startTerminal")?.since).toBe(
       "2026.8",

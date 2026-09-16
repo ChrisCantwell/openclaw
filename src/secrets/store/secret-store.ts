@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeAgentIdStrict } from "@openclaw/normalization-core/agent-id";
 import { err, ok, type Result } from "@openclaw/normalization-core/result";
 import type { Selectable } from "kysely";
 import { ENV_SECRET_REF_ID_RE } from "../../config/types.secrets.js";
@@ -8,6 +9,7 @@ import {
   getNodeSqliteKysely,
 } from "../../infra/kysely-sync.js";
 import { normalizeSqliteNumber } from "../../infra/sqlite-number.js";
+import { logWarn } from "../../logger.js";
 import { registerSecretValueForRedaction } from "../../logging/secret-redaction-registry.js";
 import { withExistingOpenClawStateDatabaseReadOnly } from "../../state/openclaw-state-db-readonly.js";
 import { ensureSecretStoreSchema } from "../../state/openclaw-state-db-schema-additive.js";
@@ -43,15 +45,44 @@ export {
 } from "./secret-store-validation-error.js";
 
 type SecretStoreDatabase = Pick<OpenClawStateKyselyDatabase, "secret_store_entries">;
+type SecretStoreAccessDatabase = Pick<
+  OpenClawStateKyselyDatabase,
+  "secret_store_entries" | "agent_secret_assignments"
+>;
 type SecretStoreRow = Selectable<OpenClawStateKyselyDatabase["secret_store_entries"]>;
 type SecretStoreScope = { kind: "team" };
 type SecretStoreKind = "secret" | "env";
+
+/**
+ * Secret-value audience: orthogonal to value protection (kind).
+ * "all" preserves legacy team-wide delivery to every valid agent;
+ * "selected" restricts delivery to explicitly assigned agents via
+ * agent_secret_assignments. Existing rows predate the column and behave as
+ * "all" for backward compatibility; empty assignment sets never imply
+ * global access.
+ */
+export type SecretStoreAudience = "all" | "selected";
+
+const SECRET_STORE_AUDIENCES: readonly SecretStoreAudience[] = ["all", "selected"];
+
+/** Normalizes the persisted audience; absent/invalid legacy values stay "all". */
+export function normalizeSecretStoreAudience(
+  value: string | null | undefined,
+): SecretStoreAudience {
+  return value === "selected" ? "selected" : "all";
+}
+
+function isSecretStoreAudience(value: unknown): value is SecretStoreAudience {
+  return typeof value === "string" && SECRET_STORE_AUDIENCES.includes(value as never);
+}
 
 export type SecretStoreWriteParams = {
   scope: SecretStoreScope;
   name: string;
   value: string;
   kind: SecretStoreKind;
+  /** Entry audience; defaults to "all" (legacy team-wide delivery). */
+  audience?: SecretStoreAudience;
   allowedHosts?: readonly string[];
   updatedBy: string | null;
   database?: OpenClawStateDatabaseOptions;
@@ -60,6 +91,7 @@ export type SecretStoreWriteParams = {
 type SecretStoreWriteSnapshot = {
   value: string;
   kind: SecretStoreKind;
+  audience: SecretStoreAudience;
   allowedHosts: string | null;
   updatedBy: string | null;
 };
@@ -72,6 +104,7 @@ export type SecretStoreEntryMetadata = {
   updatedAtMs: number;
   createdAtMs: number;
   updatedBy: string | null;
+  audience: SecretStoreAudience;
   allowedHosts?: string[];
   valuePreview?: string;
 };
@@ -190,6 +223,7 @@ function toMetadata(row: SecretStoreRow): SecretStoreEntryMetadata {
     kind: row.kind as SecretStoreKind,
     scopeKind: row.scope_kind as "team" | "identity",
     scopeId: row.scope_id,
+    audience: normalizeSecretStoreAudience(row.audience),
     updatedAtMs: normalizeSqliteNumber(row.updated_at_ms) ?? 0,
     createdAtMs: normalizeSqliteNumber(row.created_at_ms) ?? 0,
     updatedBy: row.updated_by,
@@ -225,6 +259,180 @@ export function listSecretStoreEntries(params: {
   } catch (error) {
     if (isMissingSecretStoreTableError(error)) {
       return [];
+    }
+    throw error;
+  }
+}
+
+/**
+ * Reads one named team-store entry's metadata without the store inventory.
+ * Env-kind values stay internal: the protocol layer redacts to valuePreview
+ * for operator surfaces only; agent-scoped callers never receive them here.
+ */
+export function getSecretStoreEntryMetadata(params: {
+  scope: SecretStoreScope;
+  name: string;
+  database?: OpenClawStateDatabaseOptions;
+}): SecretStoreEntryMetadata | null {
+  const { scopeKind, scopeId } = normalizeScope(params.scope);
+  try {
+    return (
+      withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
+        const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
+        const row = executeSqliteQueryTakeFirstSync(
+          sqlite,
+          db
+            .selectFrom("secret_store_entries")
+            .selectAll()
+            .where("scope_kind", "=", scopeKind)
+            .where("scope_id", "=", scopeId)
+            .where("name", "=", params.name)
+            .where("deleted_at_ms", "is", null)
+            .limit(1),
+        );
+        if (!row || classifyHiddenGitHubStoreName(row.name) !== undefined) {
+          return null;
+        }
+        return toMetadata(row);
+      }, params.database ?? {}) ?? null
+    );
+  } catch (error) {
+    if (isMissingSecretStoreTableError(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Resolves one validated agent's effective secret-name access over the live
+ * team store: every live entry with audience "all" (legacy team-wide
+ * delivery) plus every live entry with audience "selected" that has an
+ * explicit assignment row for the agent. An empty assignment set never
+ * implies global access. Missing tables fail open only to the "all" side —
+ * identical to legacy behavior before assignments existed.
+ */
+export function listEffectiveAgentSecretNames(params: {
+  agentId: string;
+  database?: OpenClawStateDatabaseOptions;
+}): string[] {
+  const normalized = normalizeAgentIdStrict(params.agentId);
+  if (!normalized.ok) {
+    return [];
+  }
+  try {
+    return (
+      withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
+        const db = getNodeSqliteKysely<SecretStoreAccessDatabase>(sqlite);
+        const rows = executeSqliteQuerySync(
+          sqlite,
+          db
+            .selectFrom("secret_store_entries")
+            .select(["name", "audience"])
+            .where("scope_kind", "=", "team")
+            .where("scope_id", "=", "")
+            .where("deleted_at_ms", "is", null),
+        ).rows.filter((row) => classifyHiddenGitHubStoreName(row.name) === undefined);
+        const assigned = new Set(
+          executeSqliteQuerySync(
+            sqlite,
+            db
+              .selectFrom("agent_secret_assignments")
+              .select("secret_name")
+              .where("agent_id", "=", normalized.value),
+          ).rows.map((row) => row.secret_name),
+        );
+        return rows
+          .filter(
+            (row) => normalizeSecretStoreAudience(row.audience) === "all" || assigned.has(row.name),
+          )
+          .map((row) => row.name)
+          .sort();
+      }, params.database ?? {}) ?? []
+    );
+  } catch (error) {
+    if (
+      isMissingSecretStoreTableError(error) ||
+      (error instanceof Error && error.message === "no such table: agent_secret_assignments")
+    ) {
+      // No assignments table: selected entries cannot exist yet; "all"
+      // entries keep legacy delivery.
+      try {
+        return listSecretStoreEntries({ scope: { kind: "team" }, database: params.database })
+          .filter((entry) => entry.audience === "all")
+          .map((entry) => entry.name);
+      } catch {
+        return [];
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Effective single-name access check mirroring listEffectiveAgentSecretNames:
+ * audience "all" is accessible to every valid agent; audience "selected"
+ * requires an explicit assignment row.
+ */
+export function hasEffectiveAgentSecretAccess(params: {
+  agentId: string;
+  secretName: string;
+  database?: OpenClawStateDatabaseOptions;
+}): boolean {
+  const normalized = normalizeAgentIdStrict(params.agentId);
+  if (!normalized.ok) {
+    return false;
+  }
+  try {
+    return (
+      withExistingOpenClawStateDatabaseReadOnly(({ db: sqlite }) => {
+        const db = getNodeSqliteKysely<SecretStoreAccessDatabase>(sqlite);
+        const entry = executeSqliteQueryTakeFirstSync(
+          sqlite,
+          db
+            .selectFrom("secret_store_entries")
+            .select("audience")
+            .where("scope_kind", "=", "team")
+            .where("scope_id", "=", "")
+            .where("name", "=", params.secretName)
+            .where("deleted_at_ms", "is", null)
+            .limit(1),
+        );
+        if (!entry || classifyHiddenGitHubStoreName(params.secretName) !== undefined) {
+          return false;
+        }
+        if (normalizeSecretStoreAudience(entry.audience) === "all") {
+          return true;
+        }
+        return (
+          executeSqliteQueryTakeFirstSync(
+            sqlite,
+            db
+              .selectFrom("agent_secret_assignments")
+              .select("secret_name")
+              .where("agent_id", "=", normalized.value)
+              .where("secret_name", "=", params.secretName)
+              .limit(1),
+          ) !== undefined
+        );
+      }, params.database ?? {}) ?? false
+    );
+  } catch (error) {
+    if (isMissingSecretStoreTableError(error)) {
+      return false;
+    }
+    if (error instanceof Error && error.message === "no such table: agent_secret_assignments") {
+      // Legacy database: only "all"-audience entries can exist.
+      try {
+        const entry = getSecretStoreEntryMetadata({
+          scope: { kind: "team" },
+          name: params.secretName,
+          database: params.database,
+        });
+        return entry?.audience === "all";
+      } catch {
+        return false;
+      }
     }
     throw error;
   }
@@ -287,10 +495,26 @@ export function consumeGitHubSetupHandoff(params: {
   }
 }
 
+/** Config policy controlling agent assignment filtering of exec store snapshots. */
+export type AgentSecretAssignmentEnforcement = "off" | "advisory" | "enforce";
+
+/** Resolves the snapshot enforcement mode from raw config; anything invalid or absent stays "off". */
+export function resolveAgentSecretAssignmentEnforcement(
+  value: unknown,
+): AgentSecretAssignmentEnforcement {
+  return value === "advisory" || value === "enforce" ? value : "off";
+}
+
 /** Captures one coherent team-store snapshot for an agent run's exec environment. */
 export function readSecretStoreExecEnvironment(params: {
   includeSecretSentinels: boolean;
   excludeNames?: readonly string[];
+  /** Derived agent run identity; never caller-supplied. */
+  agentId?: string;
+  /** Assignment filtering policy resolved from config. Default "off" preserves legacy behavior. */
+  assignmentEnforcement?: AgentSecretAssignmentEnforcement;
+  /** Pre-resolved assigned names for `agentId`; resolved by the caller-side snapshot helper. */
+  assignedNames?: Set<string>;
   database?: OpenClawStateDatabaseOptions;
 }): SecretStoreExecEnvironment {
   try {
@@ -311,12 +535,46 @@ export function readSecretStoreExecEnvironment(params: {
         const secretSentinels: Record<string, string> = {};
         const secretEgressBindings: SecretStoreEgressBinding[] = [];
         const excludedNames = new Set(params.excludeNames ?? []);
+        // Audience filtering: identity is the tool's derived agentId, never
+        // model input. "all"-audience entries keep legacy team-wide delivery
+        // to every valid agent; "selected"-audience entries project only to
+        // explicitly assigned agents, and an empty assignment set never
+        // implies global access. "enforce" fails closed on a missing/invalid
+        // identity (enforced by the caller); "advisory" logs drift and still
+        // delivers.
+        // Selected-audience entries are gated on an explicit assignment for
+        // the derived agent identity: without an identity, or without that
+        // agent's assignment row, a selected entry projects only in the
+        // advisory soak (with a warning); otherwise it fails closed
+        // individually. All-audience entries keep legacy team-wide delivery.
+        // Enforcement mode only chooses silent withholding (off/enforce)
+        // versus warn-and-deliver soak (advisory).
+        const enforcement = resolveAgentSecretAssignmentEnforcement(params.assignmentEnforcement);
+        const assignedNames =
+          params.agentId && params.assignedNames ? params.assignedNames : undefined;
+        const advisory = enforcement === "advisory";
         for (const row of rows) {
           if (
             classifyHiddenGitHubStoreName(row.name) !== undefined ||
             excludedNames.has(row.name)
           ) {
             continue;
+          }
+          if (
+            normalizeSecretStoreAudience(row.audience) === "selected" &&
+            !(assignedNames?.has(row.name) ?? false)
+          ) {
+            if (advisory && assignedNames) {
+              // Advisory soak with a known identity keeps delivery of the
+              // selected entry and only surfaces the drift from its explicit
+              // assignment set. Without an identity there is no drift to soak
+              // — the entry belongs to other agents and fails closed.
+              logWarn(
+                `secrets: exec snapshot includes selected-audience store entry ${row.name} without an assignment for this agent`,
+              );
+            } else {
+              continue;
+            }
           }
           if (row.kind === "env") {
             env[row.name] = row.value;
@@ -418,6 +676,9 @@ function writeSecretStoreEntryInternal(
       ? normalizeSecretAllowedHosts(params.allowedHosts)
       : undefined;
   const allowedHostsJson = allowedHosts?.length ? JSON.stringify(allowedHosts) : null;
+  const audience: SecretStoreAudience = isSecretStoreAudience(params.audience)
+    ? params.audience
+    : "all";
   const { scopeKind, scopeId } = normalizeScope(params.scope);
   const now = Date.now();
   return runOpenClawStateWriteTransaction(
@@ -429,7 +690,7 @@ function writeSecretStoreEntryInternal(
             sqlite,
             db
               .selectFrom("secret_store_entries")
-              .select(["value", "kind", "allowed_hosts", "updated_by"])
+              .select(["value", "kind", "audience", "allowed_hosts", "updated_by"])
               .where("scope_kind", "=", scopeKind)
               .where("scope_id", "=", scopeId)
               .where("name", "=", params.name)
@@ -446,6 +707,7 @@ function writeSecretStoreEntryInternal(
             name: params.name,
             value: params.value,
             kind: params.kind,
+            audience,
             created_at_ms: now,
             updated_at_ms: now,
             updated_by: params.updatedBy,
@@ -456,6 +718,7 @@ function writeSecretStoreEntryInternal(
             conflict.columns(["scope_kind", "scope_id", "name"]).doUpdateSet({
               value: params.value,
               kind: params.kind,
+              audience,
               updated_at_ms: now,
               updated_by: params.updatedBy,
               deleted_at_ms: null,
@@ -472,6 +735,7 @@ function writeSecretStoreEntryInternal(
             value: previous.value,
             // SAFETY: The canonical secret_store schema and write validation restrict kind to secret|env.
             kind: previous.kind as SecretStoreKind,
+            audience: normalizeSecretStoreAudience(previous.audience),
             allowedHosts: previous.allowed_hosts,
             updatedBy: previous.updated_by,
           }
@@ -515,6 +779,7 @@ function rollbackSecretStoreEntryWrite(params: {
                 .set({
                   value: params.previous.value,
                   kind: params.previous.kind,
+                  audience: params.previous.audience,
                   allowed_hosts: params.previous.allowedHosts,
                   updated_at_ms: now,
                   updated_by: params.previous.updatedBy,

@@ -2,6 +2,7 @@
 // Wires reload, secrets, exec approval, and plugin approval RPC handlers.
 import { randomUUID } from "node:crypto";
 import { resolveProjectedMcpCodexToolApprovalMode } from "../agents/mcp-codex-tool-approval.js";
+import { mutateConfigFileWithRetry } from "../config/config.js";
 import { getRuntimeConfig } from "../config/io.js";
 import type { AgentRunApprovalClosureReason } from "../infra/agent-run-approval-leases.js";
 import {
@@ -24,6 +25,7 @@ import {
 } from "../infra/system-agent-approvals.js";
 import { runWithRetainedGatewayRootWork } from "../process/gateway-work-admission.js";
 import { resolveCommandSecretsFromActiveRuntimeSnapshot } from "../secrets/runtime-command-secrets.js";
+import { resolveAgentSecretAssignmentEnforcement } from "../secrets/store/secret-store.js";
 import { AsyncWorkScope } from "../shared/async-work-scope.js";
 import { createLazyPromise } from "../shared/lazy-runtime.js";
 import type { AgentRuntimeDelegatedAuthority } from "./agent-runtime-identity-token.js";
@@ -388,6 +390,23 @@ export function createGatewayAuxHandlers(
         reloadSecrets,
         storeWriteService,
         log: params.log,
+        configAccess: {
+          readAgentAssignmentEnforcement: () =>
+            resolveAgentSecretAssignmentEnforcement(
+              getRuntimeConfig()?.secrets?.agentAssignmentEnforcement,
+            ),
+          // Awaited durable persist: the promise is observed, not discarded,
+          // so enforcement.set can truthfully confirm or fail.
+          writeAgentAssignmentEnforcement: async (mode) => {
+            await mutateConfigFileWithRetry({
+              afterWrite: { mode: "auto" },
+              mutate: (draft) => {
+                draft.secrets ??= {};
+                draft.secrets.agentAssignmentEnforcement = mode;
+              },
+            });
+          },
+        },
         resolveSecrets: async ({
           allowedPaths,
           commandName,
@@ -500,6 +519,35 @@ export function createGatewayAuxHandlers(
       "question.list": createLazyHandler("question.list", loadQuestionHandlers),
       "secrets.reload": createLazyHandler("secrets.reload", loadSecretsHandlers),
       "secrets.resolve": createLazyHandler("secrets.resolve", loadSecretsHandlers),
+      "secrets.assignments.list": createLazyHandler(
+        "secrets.assignments.list",
+        loadSecretsHandlers,
+      ),
+      "secrets.assignments.has": createLazyHandler("secrets.assignments.has", loadSecretsHandlers),
+      "secrets.assignments.entry": createLazyHandler(
+        "secrets.assignments.entry",
+        loadSecretsHandlers,
+      ),
+      "secrets.assignments.admin.list": createLazyHandler(
+        "secrets.assignments.admin.list",
+        loadSecretsHandlers,
+      ),
+      "secrets.assignments.admin.assign": createLazyHandler(
+        "secrets.assignments.admin.assign",
+        loadSecretsHandlers,
+      ),
+      "secrets.assignments.admin.unassign": createLazyHandler(
+        "secrets.assignments.admin.unassign",
+        loadSecretsHandlers,
+      ),
+      "secrets.assignments.enforcement.get": createLazyHandler(
+        "secrets.assignments.enforcement.get",
+        loadSecretsHandlers,
+      ),
+      "secrets.assignments.enforcement.set": createLazyHandler(
+        "secrets.assignments.enforcement.set",
+        loadSecretsHandlers,
+      ),
       "secrets.store.list": createLazyHandler("secrets.store.list", loadSecretsHandlers),
       "secrets.store.set": createLazyHandler("secrets.store.set", loadSecretsHandlers),
       "secrets.store.delete": createLazyHandler("secrets.store.delete", loadSecretsHandlers),

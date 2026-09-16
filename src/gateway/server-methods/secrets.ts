@@ -4,6 +4,18 @@ import {
   ErrorCodes,
   errorShape,
   type ValidationError,
+  validateSecretsAssignmentsHasParams,
+  validateSecretsAssignmentsHasResult,
+  validateSecretsAssignmentsEntryParams,
+  validateSecretsAssignmentsEntryResult,
+  validateSecretsAssignmentsAdminAssignParams,
+  validateSecretsAssignmentsAdminListParams,
+  validateSecretsAssignmentsAdminListResult,
+  validateSecretsAssignmentsAdminMutationResult,
+  validateSecretsAssignmentsAdminUnassignParams,
+  type SecretsAssignmentsEntry,
+  validateSecretsAssignmentsListParams,
+  validateSecretsAssignmentsListResult,
   validateSecretsResolveParams,
   validateSecretsResolveResult,
   validateSecretsStoreDeleteParams,
@@ -16,23 +28,65 @@ import {
 import { formatErrorMessage as errorMessage } from "../../infra/errors.js";
 import { registerSecretValueForRedaction } from "../../logging/secret-redaction-registry.js";
 import {
+  AgentSecretAssignmentValidationError,
+  deleteAgentSecretAssignment,
+  listAgentSecretAssignmentsAdmin,
+  writeAgentSecretAssignment,
+} from "../../secrets/assignment-store.js";
+import {
   collectSecretStoreRefKeysInSnapshot,
   getActiveSecretsRuntimeSnapshotState,
 } from "../../secrets/runtime-state.js";
 import {
   deleteSecretStoreEntry,
+  getSecretStoreEntryMetadata,
+  hasEffectiveAgentSecretAccess,
+  listEffectiveAgentSecretNames,
   listSecretStoreEntries,
   purgeExpiredSecretStoreEntries,
   SecretStoreValidationError,
+  type SecretStoreEntryMetadata,
   writeSecretStoreEntry,
 } from "../../secrets/store/secret-store.js";
 import { isKnownCoreSecretTargetId, isKnownSecretTargetId } from "../../secrets/target-registry.js";
 import { holdGatewayPolicyResponse } from "../server/ws-policy-close.js";
 import { createAgentRuntimeAuthorityGuard } from "./agent-runtime-authority.js";
+import { createEnforcementHandlers, type EnforcementConfigAccess } from "./enforcement-handlers.js";
 import type { GatewayClient, GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
 const teamScope = { kind: "team" } as const;
+
+/**
+ * Model-visible inventory window, independent from operator-admin pagination
+ * and from any authorization decision. Nothing authorized is ever treated as
+ * absent: `total` and `truncated` disclose the remainder.
+ */
+const AGENT_SECRET_ASSIGNMENTS_WINDOW_MAX = 512;
+
+/** Strips env plaintext from store metadata before any agent-scoped response. */
+function toValueFreeEntryMetadata(
+  entry: SecretStoreEntryMetadata | null,
+): SecretsAssignmentsEntry | null {
+  if (!entry) {
+    return null;
+  }
+  // Team scope is a server-side fact of this read; narrow before mapping.
+  const scope = {
+    name: entry.name,
+    scopeKind: "team",
+    scopeId: "",
+    kind: entry.kind,
+    audience: entry.audience,
+    createdAtMs: entry.createdAtMs,
+    updatedAtMs: entry.updatedAtMs,
+    ...(entry.updatedBy ? { updatedBy: entry.updatedBy } : {}),
+  } as const;
+  if (entry.kind === "env") {
+    return scope;
+  }
+  return { ...scope, allowedHosts: entry.allowedHosts ?? [] };
+}
 
 function toProtocolStoreEntry(
   entry: ReturnType<typeof listSecretStoreEntries>[number],
@@ -41,6 +95,7 @@ function toProtocolStoreEntry(
     name: entry.name,
     scopeKind: "team" as const,
     scopeId: "" as const,
+    audience: entry.audience,
     createdAtMs: entry.createdAtMs,
     updatedAtMs: entry.updatedAtMs,
     ...(entry.updatedBy ? { updatedBy: entry.updatedBy } : {}),
@@ -162,6 +217,8 @@ function invalidSecretsResolveField(
 export function createSecretsHandlers(params: {
   reloadSecrets: SecretStoreReload;
   storeWriteService: SecretStoreWriteService;
+  /** Operator-config access for enforcement-mode administration. */
+  configAccess: EnforcementConfigAccess;
   resolveSecrets: (params: {
     commandName: string;
     targetIds: string[];
@@ -302,6 +359,259 @@ export function createSecretsHandlers(params: {
         respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "secrets.store.list failed"));
       }
     },
+    "secrets.assignments.list": ({ params: requestParams, respond, client, context }) => {
+      if (
+        !assertValidParams(
+          requestParams,
+          validateSecretsAssignmentsListParams,
+          "secrets.assignments.list",
+          respond,
+        )
+      ) {
+        return;
+      }
+      const agentId = client?.internal?.agentRuntimeIdentity?.agentId;
+      if (!agentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agent runtime identity is required"),
+        );
+        return;
+      }
+      if (!createAgentRuntimeAuthorityGuard(client, context, respond).ensureActive()) {
+        return;
+      }
+      try {
+        // Effective access, not raw assignment rows: all-audience entries
+        // keep legacy team-wide delivery, selected entries require an
+        // explicit assignment for this runtime agent.
+        const names = listEffectiveAgentSecretNames({ agentId });
+        const total = names.length;
+        // Presentation window: the full set is never silently hidden. `total`
+        // plus `truncated` make incompleteness explicit; pagination is the
+        // operator-admin method's concern, not a bound on authorization.
+        const result = {
+          names: names.slice(0, AGENT_SECRET_ASSIGNMENTS_WINDOW_MAX),
+          total,
+          truncated: total > AGENT_SECRET_ASSIGNMENTS_WINDOW_MAX,
+        };
+        if (!validateSecretsAssignmentsListResult(result)) {
+          throw new Error("secrets.assignments.list returned invalid payload.");
+        }
+        respond(true, result);
+      } catch (error) {
+        params.log?.warn?.(`secrets.assignments.list failed: ${errorMessage(error)}`);
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "secrets.assignments.list failed"),
+        );
+      }
+    },
+    "secrets.assignments.has": ({ params: requestParams, respond, client, context }) => {
+      if (
+        !assertValidParams(
+          requestParams,
+          validateSecretsAssignmentsHasParams,
+          "secrets.assignments.has",
+          respond,
+        )
+      ) {
+        return;
+      }
+      const agentId = client?.internal?.agentRuntimeIdentity?.agentId;
+      if (!agentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agent runtime identity is required"),
+        );
+        return;
+      }
+      if (!createAgentRuntimeAuthorityGuard(client, context, respond).ensureActive()) {
+        return;
+      }
+      try {
+        // Effective access: all-audience entries are accessible to every
+        // valid agent; selected entries require an explicit assignment row.
+        const result = {
+          assigned: hasEffectiveAgentSecretAccess({
+            agentId,
+            secretName: requestParams.name,
+          }),
+        };
+        if (!validateSecretsAssignmentsHasResult(result)) {
+          throw new Error("secrets.assignments.has returned invalid payload.");
+        }
+        respond(true, result);
+      } catch (error) {
+        params.log?.warn?.(`secrets.assignments.has failed: ${errorMessage(error)}`);
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "secrets.assignments.has failed"),
+        );
+      }
+    },
+    // Name-scoped single-entry metadata read for the post-request tool flow.
+    // Runtime-identity scoped server-side; one entry only, never the inventory.
+    "secrets.assignments.entry": ({ params: requestParams, respond, client, context }) => {
+      if (
+        !assertValidParams(
+          requestParams,
+          validateSecretsAssignmentsEntryParams,
+          "secrets.assignments.entry",
+          respond,
+        )
+      ) {
+        return;
+      }
+      const agentId = client?.internal?.agentRuntimeIdentity?.agentId;
+      if (!agentId) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "agent runtime identity is required"),
+        );
+        return;
+      }
+      if (!createAgentRuntimeAuthorityGuard(client, context, respond).ensureActive()) {
+        return;
+      }
+      try {
+        const result = {
+          entry: toValueFreeEntryMetadata(
+            getSecretStoreEntryMetadata({
+              scope: teamScope,
+              name: requestParams.name,
+            }),
+          ),
+        };
+        if (!validateSecretsAssignmentsEntryResult(result)) {
+          throw new Error("secrets.assignments.entry returned invalid payload.");
+        }
+        respond(true, result);
+      } catch (error) {
+        params.log?.warn?.(`secrets.assignments.entry failed: ${errorMessage(error)}`);
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "secrets.assignments.entry failed"),
+        );
+      }
+    },
+    // Operator-admin assignment administration. Separate from the model-facing
+    // self-only methods above: explicit agentId, operator.admin scope, no
+    // runtime-identity derivation, no secret values.
+    "secrets.assignments.admin.list": ({ params: requestParams, respond }) => {
+      if (
+        !assertValidParams(
+          requestParams,
+          validateSecretsAssignmentsAdminListParams,
+          "secrets.assignments.admin.list",
+          respond,
+        )
+      ) {
+        return;
+      }
+      try {
+        const result = listAgentSecretAssignmentsAdmin({
+          cursor: requestParams.cursor,
+        });
+        if (!validateSecretsAssignmentsAdminListResult(result)) {
+          throw new Error("secrets.assignments.admin.list returned invalid payload.");
+        }
+        respond(true, result);
+      } catch (error) {
+        if (error instanceof AgentSecretAssignmentValidationError) {
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
+          return;
+        }
+        params.log?.warn?.(`secrets.assignments.admin.list failed: ${errorMessage(error)}`);
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "secrets.assignments.admin.list failed"),
+        );
+      }
+    },
+    "secrets.assignments.admin.assign": ({ params: requestParams, respond, client }) => {
+      if (
+        !assertValidParams(
+          requestParams,
+          validateSecretsAssignmentsAdminAssignParams,
+          "secrets.assignments.admin.assign",
+          respond,
+        )
+      ) {
+        return;
+      }
+      try {
+        writeAgentSecretAssignment({
+          agentId: requestParams.agentId,
+          secretName: requestParams.name,
+          ...(requestParams.providerHint !== undefined
+            ? { providerHint: requestParams.providerHint }
+            : {}),
+          assignedBy: storeUpdatedBy(client),
+        });
+        const result = { ok: true as const };
+        if (!validateSecretsAssignmentsAdminMutationResult(result)) {
+          throw new Error("secrets.assignments.admin.assign returned invalid payload.");
+        }
+        respond(true, result);
+      } catch (error) {
+        if (error instanceof AgentSecretAssignmentValidationError) {
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
+          return;
+        }
+        params.log?.warn?.(`secrets.assignments.admin.assign failed: ${errorMessage(error)}`);
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "secrets.assignments.admin.assign failed"),
+        );
+      }
+    },
+    "secrets.assignments.admin.unassign": ({ params: requestParams, respond }) => {
+      if (
+        !assertValidParams(
+          requestParams,
+          validateSecretsAssignmentsAdminUnassignParams,
+          "secrets.assignments.admin.unassign",
+          respond,
+        )
+      ) {
+        return;
+      }
+      try {
+        deleteAgentSecretAssignment({
+          agentId: requestParams.agentId,
+          secretName: requestParams.name,
+        });
+        const result = { ok: true as const };
+        if (!validateSecretsAssignmentsAdminMutationResult(result)) {
+          throw new Error("secrets.assignments.admin.unassign returned invalid payload.");
+        }
+        respond(true, result);
+      } catch (error) {
+        if (error instanceof AgentSecretAssignmentValidationError) {
+          respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, error.message));
+          return;
+        }
+        params.log?.warn?.(`secrets.assignments.admin.unassign failed: ${errorMessage(error)}`);
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.UNAVAILABLE, "secrets.assignments.admin.unassign failed"),
+        );
+      }
+    },
+    ...createEnforcementHandlers({
+      configAccess: params.configAccess,
+      log: params.log,
+    }),
     "secrets.store.set": async ({ params: requestParams, respond, client }) => {
       if (
         !assertValidParams(
@@ -320,6 +630,7 @@ export function createSecretsHandlers(params: {
           name: requestParams.name,
           value: requestParams.value,
           kind: requestParams.kind,
+          ...(requestParams.audience !== undefined ? { audience: requestParams.audience } : {}),
           ...(requestParams.allowedHosts !== undefined
             ? { allowedHosts: requestParams.allowedHosts }
             : {}),

@@ -172,6 +172,7 @@ function upsertHiddenGitHubSecret(
     allowed_hosts: null,
     deleted_at_ms: null,
     updated_at_ms: now,
+    audience: "all" as const,
   };
   executeSqliteQuerySync(
     db,

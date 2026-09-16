@@ -113,6 +113,16 @@ export function ensureSecretStoreSchema(database: DatabaseSync): void {
     }),
   ); // sqlite-allow-raw -- Canonical additive DDL only.
   ensureColumn(database, "secret_store_entries", "allowed_hosts TEXT");
+  ensureColumn(database, "secret_store_entries", "audience TEXT NOT NULL DEFAULT 'all'");
+}
+
+/** Lazily install the additive metadata-only agent secret assignment table. */
+export function ensureAgentSecretAssignmentSchema(database: DatabaseSync): void {
+  database.exec(
+    extractSqliteTableSchema(OPENCLAW_STATE_SCHEMA_SQL, "agent_secret_assignments", {
+      errorMessage: "OpenClaw agent secret assignment schema marker is missing.",
+    }),
+  ); // sqlite-allow-raw -- Canonical additive DDL only.
 }
 
 /** Lazily install durable MCP OAuth callback correlation on first feature use. */

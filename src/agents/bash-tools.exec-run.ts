@@ -102,10 +102,12 @@ export function createExecTool(
   // A new run constructs a new instance and observes later store mutations.
   let storeEnvPromise: Promise<SecretStoreExecEnvironment>;
   const resolveStoreEnv = () =>
-    (storeEnvPromise ??= import("../secrets/store/secret-store.js").then((store) =>
-      store.readSecretStoreExecEnvironment({
+    (storeEnvPromise ??= import("../secrets/exec-store-snapshot.js").then((store) =>
+      store.readAssignedSecretStoreExecEnvironment({
         includeSecretSentinels: secretEgressEnabled,
         excludeNames: preparedRunEnvironment.excludedStoreNames,
+        agentId,
+        config: defaults?.config,
       }),
     ));
   const defaultBackgroundMs = clampWithDefault(

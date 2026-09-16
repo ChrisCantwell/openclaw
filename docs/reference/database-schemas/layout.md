@@ -77,6 +77,16 @@ Restarts preserve retained entries, dismissals, and their original expiry times.
 Loading stored state does not replay browser notifications or scan transcripts
 to reconstruct old mentions.
 
+### Agent secret assignments
+
+The shared `agent_secret_assignments` table in `state/openclaw.sqlite` is
+lazily installed on first assignment write by
+`ensureAgentSecretAssignmentSchema`. It stores metadata-only bindings
+(`agent_id`, `secret_name`, assignment provenance) with no secret values, and
+is read by the exec-snapshot assignment filter and the assignment RPCs. See
+[Database schemas](/reference/database-schemas#additive-agent_secret_assignments)
+and [CLI: secrets](/cli/secrets#agent-assignments).
+
 ### ACP replay accounting
 
 The shared `acp_replay_sessions` and `acp_replay_events` tables retain bridge

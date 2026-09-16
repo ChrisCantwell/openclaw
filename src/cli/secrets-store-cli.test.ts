@@ -17,6 +17,8 @@ const mocks = await vi.hoisted(async () => {
     purge: vi.fn(),
     gatewayIdentity: vi.fn(),
     confirm: vi.fn(),
+    assign: vi.fn(),
+    unassign: vi.fn(),
   };
 });
 
@@ -43,6 +45,10 @@ vi.mock("../secrets/store/secret-store.js", async (importOriginal) => {
 });
 vi.mock("../infra/gateway-lock.js", () => ({
   readActiveGatewayLockIdentity: () => mocks.gatewayIdentity(),
+}));
+vi.mock("../secrets/assignment-store.js", () => ({
+  writeAgentSecretAssignment: (params: unknown) => mocks.assign(params),
+  deleteAgentSecretAssignment: (params: unknown) => mocks.unassign(params),
 }));
 vi.mock("@clack/prompts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@clack/prompts")>();
@@ -71,6 +77,8 @@ beforeEach(() => {
   mocks.purge.mockReset();
   mocks.gatewayIdentity.mockReset().mockResolvedValue(undefined);
   mocks.confirm.mockReset().mockResolvedValue(true);
+  mocks.assign.mockReset();
+  mocks.unassign.mockReset();
   mocks.defaultRuntime.log.mockClear();
   mocks.defaultRuntime.error.mockClear();
   mocks.defaultRuntime.writeStdout.mockClear();
@@ -79,6 +87,36 @@ beforeEach(() => {
 });
 
 describe("secrets store CLI", () => {
+  it("assigns and unassigns names without accepting a value", async () => {
+    await createProgram().parseAsync(
+      [
+        "secrets",
+        "assign",
+        "DUMMY_API_KEY",
+        "--agent",
+        "dummy-agent",
+        "--provider",
+        "dummy-provider",
+      ],
+      { from: "user" },
+    );
+    await createProgram().parseAsync(
+      ["secrets", "unassign", "DUMMY_API_KEY", "--agent", "dummy-agent", "--yes"],
+      { from: "user" },
+    );
+
+    expect(mocks.assign).toHaveBeenCalledWith({
+      agentId: "dummy-agent",
+      secretName: "DUMMY_API_KEY",
+      providerHint: "dummy-provider",
+      assignedBy: "cli",
+    });
+    expect(mocks.unassign).toHaveBeenCalledWith({
+      agentId: "dummy-agent",
+      secretName: "DUMMY_API_KEY",
+    });
+  });
+
   it("writes JSON results for list and get", async () => {
     mocks.list.mockReturnValueOnce([
       { name: "SERVICE_MODE", kind: "env", valuePreview: "production" },

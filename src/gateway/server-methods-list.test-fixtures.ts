@@ -79,7 +79,7 @@ sessions.companion.ask sessions.companion.state sessions.companion.reset memory.
 skills.proposals.events.list skills.proposals.evaluate hooks.status tasks.retry tasks.dismiss
 audit.run.inspect sessions.patchMany update.hold sessions.catalog.startTerminal
 worker.desktop.observe projects.list projects.register projects.remove worker.desktop.launch
-secrets.store.list secrets.store.set secrets.store.delete users.prefs.get users.prefs.set
+secrets.store.list secrets.store.set secrets.store.delete secrets.assignments.list secrets.assignments.has secrets.assignments.entry secrets.assignments.admin.list secrets.assignments.admin.assign secrets.assignments.admin.unassign secrets.assignments.enforcement.get secrets.assignments.enforcement.set users.prefs.get users.prefs.set
 projects.add projects.searchRemote desktop.observe desktop.launch device.scopes.requestUpgrade
 device.scopes.waitUpgrade portal.list portal.open portal.close sessions.move
 sessions.assignOwner progressCard.get progressCard.put tools.github.status

@@ -142,6 +142,7 @@ function writeRecord(
     deleted_at_ms: null,
     updated_at_ms: now,
     updated_by: null,
+    audience: "all" as const,
   };
   executeSqliteQuerySync(
     db,

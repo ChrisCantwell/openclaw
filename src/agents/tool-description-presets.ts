@@ -184,7 +184,7 @@ export function describeAskUserTool(): string {
 /** Describes the secrets tool and the store semantics the model cannot observe. */
 export function describeSecretsTool(): string {
   return [
-    "Protected credentials: `list` metadata first; `request` missing task-needed name + reason via human masked entry; `delete` removes an entry.",
+    "Protected credentials: `list_assigned_secret_names` and `has_secret` discover only this agent's assigned names; neither accepts an agent selector or reveals values/provider details. `list` returns only the names assigned to this runtime agent while assignment enforcement is active (advisory or enforce) and never shows env values; with enforcement off it lists shared-store metadata with env values redacted. `request` asks for a missing task-needed name + reason via human masked entry and stores the entry without assigning it — an operator must assign the name before use under enforcement. `delete` removes an entry only while enforcement is off; it is refused whenever assignment policy is active.",
     "Request waits for human; value goes straight to shared store, never model/chat. Use the returned store SecretRef for supported config fields.",
     "Gateway egress only: enabled proxy + exact allowedHosts required; no hosts blocks egress, not config refs. No plaintext fallback.",
     SECRET_EGRESS_USAGE_PROMPT,

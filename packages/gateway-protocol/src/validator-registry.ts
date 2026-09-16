@@ -247,6 +247,39 @@ export const validateSecretsStoreListResult = compile(S.SecretsStoreListResultSc
 export const validateSecretsStoreSetParams = compile(S.SecretsStoreSetParamsSchema);
 export const validateSecretsStoreDeleteParams = compile(S.SecretsStoreDeleteParamsSchema);
 export const validateSecretsStoreMutationResult = compile(S.SecretsStoreMutationResultSchema);
+export const validateSecretsAssignmentsListParams = compile(S.SecretsAssignmentsListParamsSchema);
+export const validateSecretsAssignmentsListResult = compile(S.SecretsAssignmentsListResultSchema);
+export const validateSecretsAssignmentsHasParams = compile(S.SecretsAssignmentsHasParamsSchema);
+export const validateSecretsAssignmentsHasResult = compile(S.SecretsAssignmentsHasResultSchema);
+export const validateSecretsAssignmentsEntryParams = compile(S.SecretsAssignmentsEntryParamsSchema);
+export const validateSecretsAssignmentsEntryResult = compile(S.SecretsAssignmentsEntryResultSchema);
+export const validateSecretsAssignmentsAdminListParams = compile(
+  S.SecretsAssignmentsAdminListParamsSchema,
+);
+export const validateSecretsAssignmentsAdminListResult = compile(
+  S.SecretsAssignmentsAdminListResultSchema,
+);
+export const validateSecretsAssignmentsAdminAssignParams = compile(
+  S.SecretsAssignmentsAdminAssignParamsSchema,
+);
+export const validateSecretsAssignmentsAdminUnassignParams = compile(
+  S.SecretsAssignmentsAdminUnassignParamsSchema,
+);
+export const validateSecretsAssignmentsAdminMutationResult = compile(
+  S.SecretsAssignmentsAdminMutationResultSchema,
+);
+export const validateSecretsAssignmentsEnforcementGetParams = compile(
+  S.SecretsAssignmentsEnforcementGetParamsSchema,
+);
+export const validateSecretsAssignmentsEnforcementGetResult = compile(
+  S.SecretsAssignmentsEnforcementGetResultSchema,
+);
+export const validateSecretsAssignmentsEnforcementSetParams = compile(
+  S.SecretsAssignmentsEnforcementSetParamsSchema,
+);
+export const validateSecretsAssignmentsEnforcementSetResult = compile(
+  S.SecretsAssignmentsEnforcementSetResultSchema,
+);
 export const validateSessionsListParams = compile(S.SessionsListParamsSchema);
 export const validateSessionCatalogShareRoute = compile(S.SessionCatalogShareRouteSchema);
 export const validateSessionsCatalogListParams = compile(S.SessionsCatalogListParamsSchema);
