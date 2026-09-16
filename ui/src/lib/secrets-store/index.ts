@@ -23,7 +23,11 @@ export type SecretsStoreDraft = {
   allowedHosts: string;
 };
 
-type SecretsStoreBulkEntry = Omit<SecretsStoreDraft, "allowedHosts" | "audience">;
+// Bulk import is always a value write parsed from dotenv text; unlike a
+// metadata-only audience edit it can never omit the value.
+type SecretsStoreBulkEntry = Omit<SecretsStoreDraft, "allowedHosts" | "audience" | "value"> & {
+  value: string;
+};
 
 export type SecretsStoreState = {
   client: GatewayBrowserClient | null;
