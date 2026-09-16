@@ -238,9 +238,6 @@ export function createExecTool(
       }
       const startedAt = Date.now();
       let execCommandOverride: string | undefined;
-      let gatewayApproval: GatewayApprovalResult | undefined;
-      // beforeSpawn hooks read this ref so the pre-spawn recheck observes the
-      // approval result captured for the current execution.
       const gatewayApprovalRef: { current: GatewayApprovalResult | undefined } = {
         current: undefined,
       };
@@ -428,8 +425,7 @@ export function createExecTool(
 
         const resolvedExecEnvState = requestPreparation.getResolvedExecEnvPreparedState(params);
         const storeEnv = await resolveStoreEnv();
-        // Loopback-owned by the Gateway; sandbox and node hosts cannot use its
-        // sentinels, so both sides of the contract stay absent.
+        // Egress proxy is loopback-owned; sandbox/node hosts get no sentinels.
         const useSecretEgress = secretEgressEnabled && host === "gateway";
         const secretEgressEnv = await armSecretEgressForLaunch({
           enabled: useSecretEgress,
@@ -564,7 +560,6 @@ export function createExecTool(
             return attachExecApprovalReview(immediateResult, approvalReview);
           }
           signal?.throwIfAborted();
-          gatewayApproval = gatewayResult;
           gatewayApprovalRef.current = gatewayResult;
           execCommandOverride = gatewayResult.allowWithoutEnforcedCommand
             ? undefined
@@ -622,7 +617,7 @@ export function createExecTool(
             config: defaults?.config,
             cwd: defaults?.cwd,
           }),
-          assertCurrent: gatewayApproval?.assertCurrent,
+          assertCurrent: gatewayApprovalRef.current?.assertCurrent,
           onSettledBeforeNotify: settlement.settle,
         });
         discardPreparedSandboxWorkdir = null;
