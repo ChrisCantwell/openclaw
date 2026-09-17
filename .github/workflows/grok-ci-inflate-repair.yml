@@ -28,7 +28,7 @@ jobs:
             "ci-repair/proxy-server.ts.z64": (
               "src/secrets/egress-proxy/proxy-server.ts", {}),
             "ci-repair/bash-tools.exec-run.ts.z64": (
-              "src/agents/bash-tools.exec-run.ts", {890: "C", 893: "S"}),
+              "src/agents/bash-tools.exec-run.ts", {890: "C", 893: "S", 6954: "d"}),
             "ci-repair/bash-tools.exec-run-secret-hooks.ts.z64": (
               "src/agents/bash-tools.exec-run-secret-hooks.ts", {}),
             "ci-repair/bash-tools.exec-secret-authority.test.ts.z64": (
