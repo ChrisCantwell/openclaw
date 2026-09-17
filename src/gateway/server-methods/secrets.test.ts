@@ -10,6 +10,7 @@ const storeMocks = vi.hoisted(() => ({
   listEntries: vi.fn(() => [] as Array<Record<string, unknown>>),
   purgeEntries: vi.fn(() => 0),
   writeEntry: vi.fn(),
+  updatePolicy: vi.fn(),
   getSnapshot: vi.fn(() => ({ sourceConfig: {} })),
   collectRefKeys: vi.fn((_config: unknown, _name: string) => new Set<string>()),
   listAssignments: vi.fn(() => [] as string[]),
@@ -72,6 +73,7 @@ vi.mock("../../secrets/store/secret-store.js", () => {
     listSecretStoreEntries: storeMocks.listEntries,
     purgeExpiredSecretStoreEntries: storeMocks.purgeEntries,
     SecretStoreValidationError,
+    updateSecretStoreEntryPolicy: storeMocks.updatePolicy,
     writeSecretStoreEntry: storeMocks.writeEntry,
   };
 });
@@ -252,6 +254,7 @@ describe("secrets handlers", () => {
     storeMocks.listEntries.mockReset().mockReturnValue([]);
     storeMocks.purgeEntries.mockReset().mockReturnValue(0);
     storeMocks.writeEntry.mockReset();
+    storeMocks.updatePolicy.mockReset();
     storeMocks.getSnapshot.mockReset().mockReturnValue({ sourceConfig: {} });
     storeMocks.collectRefKeys.mockReset().mockReturnValue(new Set());
     storeMocks.listEffectiveNames.mockReset().mockReturnValue([]);
@@ -487,6 +490,29 @@ describe("secrets handlers", () => {
       ],
     });
     expect(JSON.stringify(respond.mock.calls[0]?.[1])).not.toContain("malicious-leak");
+  });
+
+  it("accepts a value-omitting allowed-hosts policy save", async () => {
+    const respond = vi.fn();
+    await invokeStoreMethod({
+      handlers: createHandlers(),
+      method: "secrets.store.set",
+      requestParams: {
+        name: "SERVICE_API_KEY",
+        kind: "secret",
+        audience: "selected",
+        allowedHosts: ["api.example.test"],
+      },
+      respond,
+    });
+    expect(storeMocks.updatePolicy).toHaveBeenCalledWith({
+      scope: { kind: "team" },
+      name: "SERVICE_API_KEY",
+      audience: "selected",
+      allowedHosts: ["api.example.test"],
+      updatedBy: "Control UI",
+    });
+    expect(respond).toHaveBeenCalledWith(true, { ok: true, reloaded: false });
   });
 
   it("refreshes the runtime only after mutations of referenced store names", async () => {

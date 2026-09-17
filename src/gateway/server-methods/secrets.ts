@@ -560,13 +560,17 @@ export function createSecretsHandlers(params: {
       let saved = false;
       try {
         holdGatewayPolicyResponse(respond);
-        if (requestParams.value === undefined && requestParams.audience === undefined) {
+        if (
+          requestParams.value === undefined &&
+          requestParams.audience === undefined &&
+          requestParams.allowedHosts === undefined
+        ) {
           respond(
             false,
             undefined,
             errorShape(
               ErrorCodes.INVALID_REQUEST,
-              "secrets.store.set requires a value, or an audience for a metadata-only audience edit of an existing entry.",
+              "secrets.store.set requires a value, or policy metadata for an existing entry.",
             ),
           );
           return;

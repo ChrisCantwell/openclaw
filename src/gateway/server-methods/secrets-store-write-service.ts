@@ -7,7 +7,7 @@ import {
 import {
   purgeExpiredSecretStoreEntries,
   SecretStoreValidationError,
-  updateSecretStoreAudience,
+  updateSecretStoreEntryPolicy,
   writeSecretStoreEntry,
 } from "../../secrets/store/secret-store.js";
 // Gateway secret-store write service: owns redaction-first store writes and
@@ -80,16 +80,17 @@ export function createSecretStoreWriteService(params: {
     ) {
       const value = input.value;
       if (value === undefined) {
-        if (input.audience === undefined) {
+        if (input.audience === undefined && input.allowedHosts === undefined) {
           throw new SecretStoreValidationError(
             "SECRET_STORE_VALUE_EMPTY",
-            "A store write must supply a value, or an audience for a metadata-only edit of an existing entry.",
+            "A store write must supply a value, or policy metadata for an existing entry.",
           );
         }
-        updateSecretStoreAudience({
+        updateSecretStoreEntryPolicy({
           scope: teamScope,
           name: input.name,
-          audience: input.audience,
+          ...(input.audience !== undefined ? { audience: input.audience } : {}),
+          ...(input.allowedHosts !== undefined ? { allowedHosts: input.allowedHosts } : {}),
           updatedBy: input.updatedBy,
         });
         return;

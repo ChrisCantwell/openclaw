@@ -507,6 +507,74 @@ export function updateSecretStoreAudience(params: {
   );
 }
 
+/** Atomically applies value-omitting policy edits without rewriting the stored value. */
+export function updateSecretStoreEntryPolicy(params: {
+  scope: SecretStoreScope;
+  name: string;
+  audience?: SecretStoreAudience;
+  allowedHosts?: readonly string[];
+  updatedBy: string | null;
+  database?: OpenClawStateDatabaseOptions;
+}): void {
+  assertSecretStoreEnvName(params.name);
+  if (params.audience === undefined && params.allowedHosts === undefined) {
+    throw new SecretStoreValidationError(
+      "SECRET_STORE_VALUE_EMPTY",
+      "A metadata-only store write must supply an audience or allowed hosts.",
+    );
+  }
+  const audience =
+    params.audience === undefined
+      ? undefined
+      : isSecretStoreAudience(params.audience)
+        ? params.audience
+        : normalizeSecretStoreAudience(params.audience);
+  const allowedHosts =
+    params.allowedHosts === undefined
+      ? undefined
+      : normalizeSecretAllowedHosts(params.allowedHosts);
+  const { scopeKind, scopeId } = normalizeScope(params.scope);
+  const now = Date.now();
+  runOpenClawStateWriteTransaction(
+    ({ db: sqlite }) => {
+      ensureSecretStoreSchema(sqlite);
+      const db = getNodeSqliteKysely<SecretStoreDatabase>(sqlite);
+      let query = db
+        .updateTable("secret_store_entries")
+        .set({
+          ...(audience !== undefined ? { audience } : {}),
+          ...(allowedHosts !== undefined
+            ? { allowed_hosts: allowedHosts.length ? JSON.stringify(allowedHosts) : null }
+            : {}),
+          updated_at_ms: now,
+          updated_by: params.updatedBy,
+        })
+        .where("scope_kind", "=", scopeKind)
+        .where("scope_id", "=", scopeId)
+        .where("name", "=", params.name)
+        .where("deleted_at_ms", "is", null);
+      if (allowedHosts !== undefined) {
+        query = query.where("kind", "=", "secret");
+      }
+      const updated = executeSqliteQuerySync(sqlite, query);
+      if (Number(updated.numAffectedRows ?? 0n) !== 1) {
+        throw new SecretStoreValidationError(
+          allowedHosts === undefined
+            ? "SECRET_STORE_INVALID_NAME"
+            : "SECRET_STORE_INVALID_ALLOWED_HOST",
+          allowedHosts === undefined
+            ? 'Secret store entry "' +
+                params.name +
+                '" does not exist; metadata edits only apply to existing entries.'
+            : 'Secret store entry "' + params.name + '" is missing or is not a secret entry.',
+        );
+      }
+    },
+    params.database,
+    { operationLabel: "secrets.store.policy" },
+  );
+}
+
 export function updateSecretStoreAllowedHosts(params: {
   scope: SecretStoreScope;
   name: string;

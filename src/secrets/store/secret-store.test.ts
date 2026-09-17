@@ -17,6 +17,7 @@ import {
   deleteHiddenGitHubSecretRecord,
   deleteSecretStoreEntry,
   updateSecretStoreAudience,
+  updateSecretStoreEntryPolicy,
   listHiddenGitHubSecretRecordNames,
   listSecretStoreEntries,
   purgeExpiredSecretStoreEntries,
@@ -908,6 +909,60 @@ describe("audience write semantics", () => {
       }),
     ).toThrow(/does not exist/);
   });
+});
+
+it("atomically updates supplied policy metadata while preserving omitted fields and the value", () => {
+  const database = createDatabaseOptions();
+  writeSecretStoreEntry({
+    scope: team,
+    name: "POLICY_KEY",
+    value: "vault-secret-value",
+    kind: "secret",
+    audience: "all",
+    allowedHosts: ["old.example.test"],
+    updatedBy: "test",
+    database,
+  });
+  updateSecretStoreEntryPolicy({
+    scope: team,
+    name: "POLICY_KEY",
+    audience: "selected",
+    allowedHosts: ["new.example.test"],
+    updatedBy: "test",
+    database,
+  });
+  updateSecretStoreEntryPolicy({
+    scope: team,
+    name: "POLICY_KEY",
+    allowedHosts: ["final.example.test"],
+    updatedBy: "test",
+    database,
+  });
+  const entry = listSecretStoreEntries({ scope: team, database }).find(
+    (item) => item.name === "POLICY_KEY",
+  );
+  expect(entry).toMatchObject({ audience: "selected", allowedHosts: ["final.example.test"] });
+  expect(readSecretStoreValue({ scope: team, name: "POLICY_KEY", database })).toEqual({
+    ok: true,
+    value: "vault-secret-value",
+  });
+  writeSecretStoreEntry({
+    scope: team,
+    name: "ENV_KEY",
+    value: "env-value",
+    kind: "env",
+    updatedBy: "test",
+    database,
+  });
+  expect(() =>
+    updateSecretStoreEntryPolicy({
+      scope: team,
+      name: "ENV_KEY",
+      allowedHosts: ["blocked.example.test"],
+      updatedBy: "test",
+      database,
+    }),
+  ).toThrow(/not a secret entry/);
 });
 
 describe("old-schema secret store upgrade", () => {
