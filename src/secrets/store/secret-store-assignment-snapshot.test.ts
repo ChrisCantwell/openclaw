@@ -368,7 +368,11 @@ describe("audience-scoped exec store snapshots", () => {
         updatedBy: "test",
         database,
       });
-      writeAgentSecretAssignment({ agentId: "bulk-agent", secretName: name, database });
+      writeAgentSecretAssignment({
+        agentId: "bulk-agent",
+        secretName: name,
+        database,
+      });
       return name;
     });
     const environment = readAssignedSecretStoreExecEnvironment({
@@ -481,12 +485,22 @@ describe("pre-effect authority revalidation", () => {
     ).toBe(false);
   });
 
-  it("revalidation stays permissive when enforcement is off or no bindings project", () => {
+  it("revalidation keeps selected-audience revocation effective when enforcement is off", () => {
     const database = createDatabaseOptions();
     seed(database);
+    const db = openOpenClawStateDatabase(database).db;
+    db.prepare("DELETE FROM agent_secret_assignments WHERE secret_name = 'ASSIGNED_SECRET'").run();
     expect(
       revalidateAssignedSecretNames({
         names: ["ASSIGNED_SECRET"],
+        agentId: "agent-a",
+        config: configWith("off"),
+        database,
+      }).ok,
+    ).toBe(false);
+    expect(
+      revalidateAssignedSecretNames({
+        names: ["GLOBAL_SECRET"],
         agentId: "agent-a",
         config: configWith("off"),
         database,

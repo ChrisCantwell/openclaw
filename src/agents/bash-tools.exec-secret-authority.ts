@@ -28,10 +28,7 @@ export function buildPreSpawnSecretAuthorityRecheck(params: {
   config?: OpenClawConfig;
   cwd: string | undefined;
 }): (() => Promise<AgentToolResult<ExecToolDetails> | undefined>) | undefined {
-  const { gatewayRevalidate, secretEgressEnabled } = params;
-  if (!gatewayRevalidate && !secretEgressEnabled) {
-    return undefined;
-  }
+  const { gatewayRevalidate } = params;
   return async () => {
     const denied = await gatewayRevalidate?.();
     if (denied) {
@@ -87,7 +84,12 @@ export async function assertSecretAuthorityForLaunch(params: {
   cwd: string | undefined;
   revalidate: SecretAuthorityRevalidate;
 }): Promise<void> {
-  const bindingNames = (params.storeEnv.secretEgressBindings ?? []).map((binding) => binding.name);
+  const bindingNames = [
+    ...new Set([
+      ...Object.keys(params.storeEnv.env ?? {}),
+      ...(params.storeEnv.secretEgressBindings ?? []).map((binding) => binding.name),
+    ]),
+  ];
   if (bindingNames.length === 0) {
     return;
   }
@@ -117,7 +119,11 @@ export async function armSecretEgressForLaunch(params: {
   cwd: string | undefined;
   registerRun: (
     run: Readonly<{ instanceId: string; runId: string }>,
-    bindings: ReadonlyArray<{ name: string; sentinel: string; allowedHosts: string[] }>,
+    bindings: ReadonlyArray<{
+      name: string;
+      sentinel: string;
+      allowedHosts: string[];
+    }>,
   ) => Record<string, string>;
   revalidate: SecretAuthorityRevalidate;
 }): Promise<Record<string, string> | undefined> {

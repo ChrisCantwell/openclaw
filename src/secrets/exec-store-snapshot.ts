@@ -87,7 +87,7 @@ export function revalidateAssignedSecretNames(params: {
   database?: Parameters<typeof readSecretStoreExecEnvironment>[0]["database"];
 }): { ok: true } | { ok: false; reason: string } {
   const enforcement = resolveExecSnapshotAssignmentEnforcement(params.config);
-  if (enforcement === "off" || params.names.length === 0) {
+  if (params.names.length === 0) {
     return { ok: true };
   }
   const agentId = params.agentId?.trim();

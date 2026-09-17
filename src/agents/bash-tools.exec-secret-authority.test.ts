@@ -54,10 +54,30 @@ describe("assertSecretAuthorityForLaunch", () => {
     expect(result.details.aggregated).toContain("denied");
   });
 
-  it("does not consult authority when the snapshot projected no bindings", async () => {
+  it("revalidates projected env entries even without protected egress", async () => {
     const revalidate = vi.fn(okRevalidate);
     await expect(
-      assertSecretAuthorityForLaunch({ storeEnv: {}, revalidate, cwd: undefined }),
+      assertSecretAuthorityForLaunch({
+        storeEnv: { env: { API_KEY: "cached" } },
+        revalidate,
+        cwd: undefined,
+      }),
+    ).resolves.toBeUndefined();
+    expect(revalidate).toHaveBeenCalledWith({
+      names: ["API_KEY"],
+      agentId: undefined,
+      config: undefined,
+    });
+  });
+
+  it("does not consult authority when the snapshot projected no entries", async () => {
+    const revalidate = vi.fn(okRevalidate);
+    await expect(
+      assertSecretAuthorityForLaunch({
+        storeEnv: {},
+        revalidate,
+        cwd: undefined,
+      }),
     ).resolves.toBeUndefined();
     expect(revalidate).not.toHaveBeenCalled();
   });
@@ -128,7 +148,7 @@ describe("armSecretEgressForLaunch", () => {
 });
 
 describe("buildPreSpawnSecretAuthorityRecheck", () => {
-  it("returns undefined when neither gateway revalidation nor egress applies", () => {
+  it("installs a guard even without gateway approval or protected egress", () => {
     expect(
       buildPreSpawnSecretAuthorityRecheck({
         gatewayRevalidate: undefined,
@@ -136,7 +156,7 @@ describe("buildPreSpawnSecretAuthorityRecheck", () => {
         resolveStoreEnv: async () => ({}),
         cwd: undefined,
       }),
-    ).toBeUndefined();
+    ).toBeDefined();
   });
 
   it("returns the gateway denial before consulting the secret store", async () => {
