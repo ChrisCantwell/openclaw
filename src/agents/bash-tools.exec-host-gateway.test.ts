@@ -3256,7 +3256,10 @@ EOF`,
       expect(getActiveGatewayRootWorkCount()).toBe(1);
       return () => {};
     });
-    runExecProcessMock.mockImplementation(async () => {
+    runExecProcessMock.mockImplementation(async (input) => {
+      expect((await input.beforeSpawn?.())?.details.aggregated).toContain(
+        "assignment revoked: API_KEY",
+      );
       expect(getActiveGatewayRootWorkCount()).toBe(1);
       announceSpawn();
       await spawnAllowed;
@@ -3271,6 +3274,10 @@ EOF`,
       command: "find . -maxdepth 1",
       turnSourceChannel: "feishu",
       approvalFollowupMode: "agent",
+      beforeSpawnSecretAuthority: async () => ({
+        content: [],
+        details: { status: "failed", aggregated: "assignment revoked: API_KEY" },
+      }),
     });
     expect(result.pendingResult?.details.status).toBe("approval-pending");
     await vi.waitFor(() => {

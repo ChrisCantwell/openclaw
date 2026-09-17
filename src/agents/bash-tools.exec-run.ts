@@ -507,6 +507,13 @@ export function createExecTool(
             : undefined;
 
         if (host === "gateway" && !bypassApprovals) {
+          const beforeSpawnSecretAuthority = buildPreSpawnSecretAuthorityRecheck({
+            secretEgressEnabled,
+            resolveStoreEnv,
+            agentId,
+            config: defaults?.config,
+            cwd: defaults?.cwd,
+          });
           const gatewayResult = await processGatewayAllowlist({
             command: params.command,
             workdir,
@@ -554,6 +561,7 @@ export function createExecTool(
             cleanupMs,
             processContinuationAvailable: allowBackground,
             trustedSafeBinDirs,
+            beforeSpawnSecretAuthority,
           });
           const immediateResult = gatewayResult.pendingResult ?? gatewayResult.deniedResult;
           if (immediateResult) {
