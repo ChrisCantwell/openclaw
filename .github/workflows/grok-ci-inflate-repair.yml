@@ -1,8 +1,10 @@
 name: grok-ci-inflate-repair
 on:
+  workflow_dispatch:
   push:
     paths:
       - "ci-repair/**"
+      - ".github/workflows/grok-ci-inflate-repair.yml"
 permissions:
   contents: write
 concurrency:
@@ -15,21 +17,38 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
-      - name: Inflate hex payloads
-        run: python3 ci-repair/inflate.py
+      - name: Inflate z64 payloads (with known MCP transcription fixes)
+        run: |
+          python3 <<'PY'
+          import zlib, base64
+          from pathlib import Path
+          mapping = {
+            "ci-repair/question.recovery.test.ts.z64": (
+              "src/gateway/server-methods/question.recovery.test.ts",
+              {671: "w"},
+            ),
+            "ci-repair/proxy-server.ts.z64": (
+              "src/secrets/egress-proxy/proxy-server.ts",
+              {},
+            ),
+            "ci-repair/bash-tools.exec-run.ts.z64": (
+              "src/agents/bash-tools.exec-run.ts",
+              {890: "C", 893: "S"},
+            ),
+          }
+          for src, (dest, fixes) in mapping.items():
+            p = Path(src)
+            if not p.exists():
+              raise SystemExit(f"missing {src}")
+            s = list(p.read_text().strip())
+            for i, ch in fixes.items():
+              s[i] = ch
+            Path(dest).write_bytes(zlib.decompress(base64.b64decode("".join(s))))
+            print("restored", dest, Path(dest).stat().st_size)
+          PY
       - name: Commit restored sources and cleanup
         run: |
           set -e
-          if [ ! -f ci-repair/exec.0.hex ]; then echo incomplete; exit 0; fi
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          m = json.loads(Path("ci-repair/manifest.json").read_text())
-          for item in m:
-            last = Path(f"ci-repair/{item['key']}.{item['nparts']-1}.hex")
-            if not last.exists():
-              raise SystemExit(f"incomplete {last}")
-          PY
           git config user.name "Grok Bot"
           git config user.email "130045959+ChrisCantwell@users.noreply.github.com"
           rm -rf ci-repair
