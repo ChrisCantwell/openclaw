@@ -157,7 +157,6 @@ type ProcessGatewayAllowlistParams = {
     AgentToolResult<ExecToolDetails> | undefined
   >;
 };
-
 /** Gateway allowlist outcome before command execution continues. */
 type ProcessGatewayAllowlistResult = {
   execCommandOverride?: string;
