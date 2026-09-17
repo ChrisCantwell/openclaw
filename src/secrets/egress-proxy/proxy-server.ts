@@ -629,7 +629,8 @@ export async function startSecretEgressProxyServer(params: {
     caCertPath: certificates.caCertPath,
     proxyOrigin,
     getCertificateStatus: certificates.getStatus,
-    registerRun: (run, bindings = [], liveAuthority) => {
+    registerRun: (run, bindings, liveAuthority) => {
+      const resolvedBindings = bindings ?? [];
       if (stopped) {
         throw new Error("Secret egress proxy has stopped");
       }
@@ -647,7 +648,7 @@ export async function startSecretEgressProxyServer(params: {
         registrations.set(key, registered);
       }
       registered.sentinelBindings = new Map(
-        bindings.map((binding) => [
+        resolvedBindings.map((binding) => [
           binding.sentinel,
           {
             allowedHosts: new Set(binding.allowedHosts.map(normalizeHostname)),

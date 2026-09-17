@@ -21,11 +21,7 @@ import {
 import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
 import { logInfo } from "../logger.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
-import {
-  isSecretEgressProxyActive,
-  registerSecretEgressProxyRun,
-} from "../secrets/egress-proxy/registry.js";
-import { revalidateAssignedSecretNames } from "../secrets/exec-store-snapshot.js";
+import { isSecretEgressProxyActive } from "../secrets/egress-proxy/registry.js";
 import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store-shared.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import { normalizeDeliveryContext } from "../utils/delivery-context.shared.js";
@@ -46,7 +42,10 @@ import {
   resolveNotifyOnExitEmptySuccess,
   resolvePreparedExecEnvironment,
 } from "./bash-tools.exec-request-preparation.js";
-import { createExecRunSecretHooks } from "./bash-tools.exec-run-secret-hooks.js";
+import {
+  armSecretEgressForLaunchFromHooks,
+  createExecRunSecretHooks,
+} from "./bash-tools.exec-run-secret-hooks.js";
 import {
   DEFAULT_MAX_OUTPUT,
   DEFAULT_PENDING_MAX_OUTPUT,
@@ -63,7 +62,6 @@ import {
   shouldSkipExecScriptPreflight,
   validateScriptFileForShellBleed,
 } from "./bash-tools.exec-script-preflight.js";
-import { armSecretEgressForLaunch } from "./bash-tools.exec-secret-authority.js";
 import {
   attachExecApprovalReview,
   buildExecForegroundResult,
@@ -432,18 +430,15 @@ export function createExecTool(
         }
 
         const resolvedExecEnvState = requestPreparation.getResolvedExecEnvPreparedState(params);
-        const storeEnv = await resolveStoreEnv();
-        // Egress proxy is loopback-owned; sandbox/node hosts get no sentinels.
-        const useSecretEgress = secretEgressEnabled && host === "gateway";
-        const secretEgressEnv = await armSecretEgressForLaunch({
-          enabled: useSecretEgress,
-          storeEnv,
-          operationalRunInstance: defaults?.operationalRunInstance,
-          ...secretAuthority,
-          cwd: workdir,
-          registerRun: registerSecretEgressProxyRun,
-          revalidate: revalidateAssignedSecretNames,
-        });
+        const { storeEnv, useSecretEgress, secretEgressEnv } =
+          await armSecretEgressForLaunchFromHooks({
+            secretEgressEnabled,
+            host,
+            resolveStoreEnv,
+            operationalRunInstance: defaults?.operationalRunInstance,
+            authority: secretAuthority,
+            cwd: workdir,
+          });
         assertSourceActive();
         const { env, requestedEnv } = resolvePreparedExecEnvironment({
           execParams: params,
