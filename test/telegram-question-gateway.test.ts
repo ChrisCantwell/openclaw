@@ -6,7 +6,7 @@ import { compileStructuredInputUrl } from "../src/agents/harness/structured-inpu
 import { buildAgentHarnessQuestionPromptPayload } from "../src/agents/harness/user-input-bridge.js";
 import { QuestionManager } from "../src/gateway/question-manager.js";
 import { createQuestionHandlers } from "../src/gateway/server-methods/question.js";
-import { createSecretStoreWriteService } from "../src/gateway/server-methods/secrets.js";
+import { createSecretStoreWriteService } from "../src/gateway/server-methods/secrets-store-write-service.js";
 import { callGatewayHandler } from "../src/gateway/server-methods/skills.test-helpers.js";
 
 type QuestionGatewayCall = { method: string; params?: Record<string, unknown> };
