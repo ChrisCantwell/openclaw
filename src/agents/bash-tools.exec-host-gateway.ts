@@ -55,20 +55,18 @@ import type { SafeBinProfile } from "../infra/exec-safe-bin-policy.js";
 import { hasPosixShellStartupBeforeInlineCommand } from "../infra/exec-wrapper-resolution.js";
 import {
   prepareSystemRunMutableFileBinding,
-  revalidateSystemRunMutableFileBinding,
   type SystemRunMutableFileBinding,
 } from "../infra/system-run-approval-binding.js";
 import {
-  APPROVAL_CWD_DRIFT_DENIED_MESSAGE,
   type ApprovedCwdSnapshot,
   captureApprovedCwdSnapshotSync,
-  revalidateApprovedCwdSnapshot,
 } from "../infra/system-run-cwd-binding.js";
 import {
   GatewayDrainingError,
   runWithGatewayIndependentRootWorkAdmission,
 } from "../process/gateway-work-admission.js";
 import { markBackgrounded, tail } from "./bash-process-registry.js";
+import { resolveGatewayExecApprovalDrift } from "./bash-tools.exec-approval-binding.js";
 import {
   buildExecAutoReviewDeniedToolResult,
   formatExecApprovalContinuationSourceOutput,
@@ -460,26 +458,6 @@ function buildGatewayExecApprovalDeniedToolResult(params: {
       cwd: params.cwd,
     },
   };
-}
-
-async function resolveGatewayExecApprovalDrift(params: {
-  binding?: SystemRunMutableFileBinding;
-  cwdSnapshot?: ApprovedCwdSnapshot;
-  cwd: string;
-}): Promise<string | undefined> {
-  if (params.binding) {
-    const current = await revalidateSystemRunMutableFileBinding({
-      binding: params.binding,
-      cwd: params.cwd,
-    });
-    if (!current.ok) {
-      return current.message;
-    }
-  }
-  if (params.cwdSnapshot && !revalidateApprovedCwdSnapshot(params.cwdSnapshot)) {
-    return APPROVAL_CWD_DRIFT_DENIED_MESSAGE;
-  }
-  return undefined;
 }
 
 /** Rechecks a gateway approval binding at the caller's final spawn boundary. */

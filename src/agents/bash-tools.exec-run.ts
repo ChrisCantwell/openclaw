@@ -46,6 +46,7 @@ import {
   resolveNotifyOnExitEmptySuccess,
   resolvePreparedExecEnvironment,
 } from "./bash-tools.exec-request-preparation.js";
+import { createExecRunSecretHooks } from "./bash-tools.exec-run-secret-hooks.js";
 import {
   DEFAULT_MAX_OUTPUT,
   DEFAULT_PENDING_MAX_OUTPUT,
@@ -62,10 +63,7 @@ import {
   shouldSkipExecScriptPreflight,
   validateScriptFileForShellBleed,
 } from "./bash-tools.exec-script-preflight.js";
-import {
-  armSecretEgressForLaunch,
-  buildPreSpawnSecretAuthorityRecheck,
-} from "./bash-tools.exec-secret-authority.js";
+import { armSecretEgressForLaunch } from "./bash-tools.exec-secret-authority.js";
 import {
   attachExecApprovalReview,
   buildExecForegroundResult,
@@ -169,11 +167,15 @@ export function createExecTool(
   const agentId =
     defaults?.agentId ??
     (parsedAgentSession ? resolveAgentIdFromSessionKey(defaults?.sessionKey) : undefined);
-  const secretAuthority = {
+  const secretHooks = createExecRunSecretHooks({
     agentId,
     config: defaults?.config,
     database: defaults?.secretStoreDatabase,
-  };
+    cwd: defaults?.cwd,
+    secretEgressEnabled,
+    resolveStoreEnv,
+  });
+  const secretAuthority = secretHooks.authority;
   const resolveHostForParams = createExecHostResolver(defaults);
   const buildUnavailableWorkdirResult = (params: {
     cwd: string;
@@ -553,13 +555,7 @@ export function createExecTool(
             cleanupMs,
             processContinuationAvailable: allowBackground,
             trustedSafeBinDirs,
-            beforeSpawnSecretAuthority: buildPreSpawnSecretAuthorityRecheck({
-              gatewayRevalidate: undefined,
-              secretEgressEnabled,
-              resolveStoreEnv,
-              ...secretAuthority,
-              cwd: defaults?.cwd,
-            }),
+            beforeSpawnSecretAuthority: secretHooks.buildRecheck(),
           });
           const immediateResult = gatewayResult.pendingResult ?? gatewayResult.deniedResult;
           if (immediateResult) {
@@ -615,13 +611,7 @@ export function createExecTool(
           processContinuationAvailable: allowBackground,
           startupSignal: signal,
           onUpdate,
-          beforeSpawn: buildPreSpawnSecretAuthorityRecheck({
-            gatewayRevalidate: gatewayApproval?.revalidateBeforeExecution,
-            secretEgressEnabled,
-            resolveStoreEnv,
-            ...secretAuthority,
-            cwd: defaults?.cwd,
-          }),
+          beforeSpawn: secretHooks.buildRecheck(gatewayApproval?.revalidateBeforeExecution),
           assertCurrent: gatewayApproval?.assertCurrent,
           onSettledBeforeNotify: settlement.settle,
         });
