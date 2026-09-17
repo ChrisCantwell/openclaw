@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SecretStoreEgressBinding } from "../secrets/store/secret-store-shared.js";
-import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store-shared.js";
+import type {
+  SecretStoreEgressBinding,
+  SecretStoreExecEnvironment,
+} from "../secrets/store/secret-store-shared.js";
 import { ExecProcessPreflightError } from "./bash-tools.exec-runtime.js";
-import { buildSecretAuthorityDeniedResult } from "./bash-tools.exec-secret-authority.js";
 import {
   armSecretEgressForLaunch,
   assertSecretAuthorityForLaunch,
   buildPreSpawnSecretAuthorityRecheck,
+  buildSecretAuthorityDeniedResult,
   type GatewayRevalidateBeforeExecution,
   type SecretAuthorityRevalidate,
 } from "./bash-tools.exec-secret-authority.js";
-import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 
 function binding(name: string): SecretStoreEgressBinding {
   return { name, sentinel: `SENTINEL_${name}`, allowedHosts: ["example.com"] };
