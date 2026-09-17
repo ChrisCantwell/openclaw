@@ -238,9 +238,7 @@ export function createExecTool(
       }
       const startedAt = Date.now();
       let execCommandOverride: string | undefined;
-      const gatewayApprovalRef: { current: GatewayApprovalResult | undefined } = {
-        current: undefined,
-      };
+      let gatewayApproval: GatewayApprovalResult | undefined;
       let approvalReview: ExecToolApprovalReview | undefined;
       const foregroundFallbackWarning =
         !allowBackground && (params.background === true || typeof params.yieldMs === "number")
@@ -501,13 +499,6 @@ export function createExecTool(
         const githubProfileDir = resolveGatewayGithubProfileDir({ host, preparedRunEnvironment });
 
         if (host === "gateway" && !bypassApprovals) {
-          const beforeSpawnSecretAuthority = buildPreSpawnSecretAuthorityRecheck({
-            secretEgressEnabled,
-            resolveStoreEnv,
-            agentId,
-            config: defaults?.config,
-            cwd: defaults?.cwd,
-          });
           const gatewayResult = await processGatewayAllowlist({
             command: params.command,
             workdir,
@@ -555,14 +546,20 @@ export function createExecTool(
             cleanupMs,
             processContinuationAvailable: allowBackground,
             trustedSafeBinDirs,
-            beforeSpawnSecretAuthority,
+            beforeSpawnSecretAuthority: buildPreSpawnSecretAuthorityRecheck({
+              secretEgressEnabled,
+              resolveStoreEnv,
+              agentId,
+              config: defaults?.config,
+              cwd: defaults?.cwd,
+            }),
           });
           const immediateResult = gatewayResult.pendingResult ?? gatewayResult.deniedResult;
           if (immediateResult) {
             return attachExecApprovalReview(immediateResult, approvalReview);
           }
           signal?.throwIfAborted();
-          gatewayApprovalRef.current = gatewayResult;
+          gatewayApproval = gatewayResult;
           execCommandOverride = gatewayResult.allowWithoutEnforcedCommand
             ? undefined
             : gatewayResult.execCommandOverride;
@@ -612,14 +609,14 @@ export function createExecTool(
           startupSignal: signal,
           onUpdate,
           beforeSpawn: buildPreSpawnSecretAuthorityRecheck({
-            gatewayRevalidate: gatewayApprovalRef.current?.revalidateBeforeExecution,
+            gatewayRevalidate: gatewayApproval?.revalidateBeforeExecution,
             secretEgressEnabled,
             resolveStoreEnv,
             agentId,
             config: defaults?.config,
             cwd: defaults?.cwd,
           }),
-          assertCurrent: gatewayApprovalRef.current?.assertCurrent,
+          assertCurrent: gatewayApproval?.assertCurrent,
           onSettledBeforeNotify: settlement.settle,
         });
         discardPreparedSandboxWorkdir = null;

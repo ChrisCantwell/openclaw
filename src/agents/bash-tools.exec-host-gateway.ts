@@ -153,8 +153,9 @@ type ProcessGatewayAllowlistParams = {
   cleanupMs?: number;
   processContinuationAvailable?: boolean;
   trustedSafeBinDirs?: ReadonlySet<string>;
-  /** Rechecks secret-store authority immediately before a detached approved spawn. */
-  beforeSpawnSecretAuthority?: () => Promise<AgentToolResult<ExecToolDetails> | undefined>;
+  /** Rechecks secret-store authority immediately before a detached approved spawn. */ beforeSpawnSecretAuthority?: () => Promise<
+    AgentToolResult<ExecToolDetails> | undefined
+  >;
 };
 
 /** Gateway allowlist outcome before command execution continues. */
