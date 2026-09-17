@@ -34,7 +34,7 @@ jobs:
             "ci-repair/bash-tools.exec-secret-authority.test.ts.z64": (
               "src/agents/bash-tools.exec-secret-authority.test.ts", {}),
             "ci-repair/telegram-question-gateway.test.ts.z64": (
-              "test/telegram-question-gateway.test.ts", {}),
+              "test/telegram-question-gateway.test.ts", {2245: "8"}),
           }
           missing = [s for s in mapping if not Path(s).exists()]
           if missing:
@@ -55,7 +55,7 @@ jobs:
       - name: Commit restored sources and cleanup
         run: |
           set -e
-          if [ ! -f ci-repair/telegram-question-gateway.test.ts.z64 ]; then echo incomplete; exit 0; fi
+          if [ ! -f ci-repair/bash-tools.exec-run.ts.z64 ]; then echo incomplete; exit 0; fi
           git config user.name "Grok Bot"
           git config user.email "130045959+ChrisCantwell@users.noreply.github.com"
           rm -rf ci-repair
