@@ -191,7 +191,11 @@ export function registerSecretStoreCli(secrets: Command): void {
             ...(options.provider ? { providerHint: options.provider } : {}),
             assignedBy: "cli",
           });
-          return { ok: true as const, agentId: options.agent.toLowerCase(), name };
+          return {
+            ok: true as const,
+            agentId: options.agent.toLowerCase(),
+            name,
+          };
         },
         options.json,
         () => defaultRuntime.log(`Assigned ${name} to agent ${options.agent.toLowerCase()}.`),
@@ -213,8 +217,15 @@ export function registerSecretStoreCli(secrets: Command): void {
             options.yes,
           );
           const { deleteAgentSecretAssignment } = await import("../secrets/assignment-store.js");
-          deleteAgentSecretAssignment({ agentId: options.agent, secretName: name });
-          return { ok: true as const, agentId: options.agent.toLowerCase(), name };
+          deleteAgentSecretAssignment({
+            agentId: options.agent,
+            secretName: name,
+          });
+          return {
+            ok: true as const,
+            agentId: options.agent.toLowerCase(),
+            name,
+          };
         },
         options.json,
         () => defaultRuntime.log(`Unassigned ${name} from agent ${options.agent.toLowerCase()}.`),
@@ -306,6 +317,7 @@ export function registerSecretStoreCli(secrets: Command): void {
             "--value is refused for secret entries. Use a stdin pipe, --value-file, or the interactive no-echo prompt.",
           );
         }
+        const audience = options.audience ? normalizeAudienceOption(options.audience) : undefined;
         const policyOnly =
           allowedHosts !== undefined &&
           options.value === undefined &&
@@ -322,6 +334,14 @@ export function registerSecretStoreCli(secrets: Command): void {
             allowedHosts,
             updatedBy: "cli",
           });
+          if (audience !== undefined) {
+            storeModule.updateSecretStoreAudience({
+              scope,
+              name,
+              audience,
+              updatedBy: "cli",
+            });
+          }
           defaultRuntime.log(
             allowedHosts.length > 0
               ? `Allowed ${name} for ${allowedHosts.join(", ")}.`
@@ -342,7 +362,6 @@ export function registerSecretStoreCli(secrets: Command): void {
           defaultRuntime.log(`Would ${kind === "secret" ? "write" : "set"} ${name} (${kind}).`);
           return;
         }
-        const audience = options.audience ? normalizeAudienceOption(options.audience) : undefined;
         storeModule.writeSecretStoreEntry({
           scope,
           name,
@@ -472,7 +491,11 @@ export function registerSecretStoreCli(secrets: Command): void {
         }
         await confirmMutation(`Import ${normalized.length} team store entries?`, options.yes);
         for (const entry of normalized) {
-          storeModule.writeSecretStoreEntry({ scope, ...entry, updatedBy: "cli" });
+          storeModule.writeSecretStoreEntry({
+            scope,
+            ...entry,
+            updatedBy: "cli",
+          });
         }
         storeModule.purgeExpiredSecretStoreEntries();
         defaultRuntime.log(`Imported ${normalized.length} team store entries.`);
