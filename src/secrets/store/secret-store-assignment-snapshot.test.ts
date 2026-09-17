@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { armSecretEgressForLaunch } from "../../agents/bash-tools.exec-secret-authority.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
   closeOpenClawStateDatabaseForTest,
@@ -518,6 +519,38 @@ describe("pre-effect authority revalidation", () => {
         database,
       }),
     ).toEqual({ ok: true });
+  });
+
+  it("uses the snapshot database again for live proxy authority", async () => {
+    const database = createDatabaseOptions();
+    const config = configWith("enforce");
+    seed(database);
+    const snapshot = readAssignedSecretStoreExecEnvironment({
+      includeSecretSentinels: true,
+      agentId: "agent-a",
+      config,
+      database,
+    });
+    let liveAuthority: ((params: { name: string; host: string }) => boolean) | undefined;
+    await armSecretEgressForLaunch({
+      enabled: true,
+      storeEnv: snapshot,
+      operationalRunInstance: { instanceId: "instance", runId: "run" },
+      agentId: "agent-a",
+      config,
+      database,
+      cwd: undefined,
+      revalidate: revalidateAssignedSecretNames,
+      registerRun: (_run, _bindings, authority) => {
+        liveAuthority = authority;
+        return {};
+      },
+    });
+    expect(liveAuthority?.({ name: "ASSIGNED_SECRET", host: "api.example.test" })).toBe(true);
+    openOpenClawStateDatabase(database)
+      .db.prepare("DELETE FROM agent_secret_assignments WHERE secret_name = ?")
+      .run("ASSIGNED_SECRET");
+    expect(liveAuthority?.({ name: "ASSIGNED_SECRET", host: "api.example.test" })).toBe(false);
   });
 
   it("revalidates live egress authority across assignment, policy, deletion, and agent removal", () => {

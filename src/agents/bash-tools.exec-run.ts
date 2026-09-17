@@ -111,8 +111,7 @@ export function createExecTool(
       store.readAssignedSecretStoreExecEnvironment({
         includeSecretSentinels: secretEgressEnabled,
         excludeNames: preparedRunEnvironment.excludedStoreNames,
-        agentId,
-        config: defaults?.config,
+        ...secretAuthority,
       }),
     ));
   const defaultBackgroundMs = clampWithDefault(
@@ -166,6 +165,11 @@ export function createExecTool(
   const agentId =
     defaults?.agentId ??
     (parsedAgentSession ? resolveAgentIdFromSessionKey(defaults?.sessionKey) : undefined);
+  const secretAuthority = {
+    agentId,
+    config: defaults?.config,
+    database: defaults?.secretStoreDatabase,
+  };
   const resolveHostForParams = createExecHostResolver(defaults);
   const buildUnavailableWorkdirResult = (params: {
     cwd: string;
@@ -429,8 +433,7 @@ export function createExecTool(
           enabled: useSecretEgress,
           storeEnv,
           operationalRunInstance: defaults?.operationalRunInstance,
-          agentId,
-          config: defaults?.config,
+          ...secretAuthority,
           cwd: workdir,
           registerRun: registerSecretEgressProxyRun,
           revalidate: revalidateAssignedSecretNames,
@@ -549,8 +552,7 @@ export function createExecTool(
             beforeSpawnSecretAuthority: buildPreSpawnSecretAuthorityRecheck({
               secretEgressEnabled,
               resolveStoreEnv,
-              agentId,
-              config: defaults?.config,
+              ...secretAuthority,
               cwd: defaults?.cwd,
             }),
           });
@@ -612,8 +614,7 @@ export function createExecTool(
             gatewayRevalidate: gatewayApproval?.revalidateBeforeExecution,
             secretEgressEnabled,
             resolveStoreEnv,
-            agentId,
-            config: defaults?.config,
+            ...secretAuthority,
             cwd: defaults?.cwd,
           }),
           assertCurrent: gatewayApproval?.assertCurrent,

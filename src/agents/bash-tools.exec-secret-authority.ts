@@ -1,6 +1,7 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { revalidateSecretEgressBindingAtRequest } from "../secrets/exec-store-egress-authority.js";
 import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store-shared.js";
+import type { OpenClawStateDatabaseOptions } from "../state/openclaw-state-db.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 import type { AgentToolResult } from "./runtime/index.js";
 
@@ -8,6 +9,7 @@ export type SecretAuthorityRevalidate = (params: {
   names: readonly string[];
   agentId?: string;
   config?: OpenClawConfig;
+  database?: OpenClawStateDatabaseOptions;
 }) => { ok: true } | { ok: false; reason: string };
 
 export type GatewayRevalidateBeforeExecution = () => Promise<
@@ -27,6 +29,7 @@ export function buildPreSpawnSecretAuthorityRecheck(params: {
   resolveStoreEnv: () => Promise<SecretStoreExecEnvironment>;
   agentId?: string;
   config?: OpenClawConfig;
+  database?: OpenClawStateDatabaseOptions;
   cwd: string | undefined;
 }): (() => Promise<AgentToolResult<ExecToolDetails> | undefined>) | undefined {
   const { gatewayRevalidate } = params;
@@ -42,6 +45,7 @@ export function buildPreSpawnSecretAuthorityRecheck(params: {
         storeEnv,
         agentId: params.agentId,
         config: params.config,
+        database: params.database,
         cwd: params.cwd,
         revalidate: revalidateAssignedSecretNames,
       });
@@ -82,6 +86,7 @@ export async function assertSecretAuthorityForLaunch(params: {
   storeEnv: SecretStoreExecEnvironment;
   agentId?: string;
   config?: OpenClawConfig;
+  database?: OpenClawStateDatabaseOptions;
   cwd: string | undefined;
   revalidate: SecretAuthorityRevalidate;
 }): Promise<void> {
@@ -98,6 +103,7 @@ export async function assertSecretAuthorityForLaunch(params: {
     names: bindingNames,
     agentId: params.agentId,
     config: params.config,
+    database: params.database,
   });
   if (!authority.ok) {
     throw new (await import("./bash-tools.exec-runtime.js")).ExecProcessPreflightError(
@@ -117,6 +123,7 @@ export async function armSecretEgressForLaunch(params: {
   operationalRunInstance: Readonly<{ instanceId: string; runId: string }> | undefined;
   agentId?: string;
   config?: OpenClawConfig;
+  database?: OpenClawStateDatabaseOptions;
   cwd: string | undefined;
   registerRun: (
     run: Readonly<{ instanceId: string; runId: string }>,
@@ -141,6 +148,7 @@ export async function armSecretEgressForLaunch(params: {
     storeEnv: params.storeEnv,
     agentId: params.agentId,
     config: params.config,
+    database: params.database,
     cwd: params.cwd,
     revalidate: params.revalidate,
   });
@@ -153,6 +161,7 @@ export async function armSecretEgressForLaunch(params: {
         host,
         agentId: params.agentId,
         config: params.config,
+        database: params.database,
       }),
   );
 }

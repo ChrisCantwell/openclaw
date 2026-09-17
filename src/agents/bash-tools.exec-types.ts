@@ -17,6 +17,7 @@ import type { ExecAutoReviewer, ExecAutoReviewTranscript } from "../infra/exec-a
 import type { SafeBinProfileFixture } from "../infra/exec-safe-bin-policy.js";
 import type { PluginHookChannelContext } from "../plugins/hook-types.js";
 import type { TerminationReason } from "../process/supervisor/types.js";
+import type { OpenClawStateDatabaseOptions } from "../state/openclaw-state-db.js";
 import type { OperationalRunInstanceRef } from "./admitted-run-context.js";
 import type { BashSandboxConfig } from "./bash-tools.shared.js";
 import type { EmbeddedFullAccessBlockedReason } from "./embedded-agent-runner/types.js";
@@ -43,6 +44,8 @@ export type ExecToolDefaults = {
   safeBinProfiles?: Record<string, SafeBinProfileFixture>;
   reviewer?: ExecReviewerConfig;
   config?: OpenClawConfig;
+  /** Optional isolated state database used by secret snapshot and live egress checks. */
+  secretStoreDatabase?: OpenClawStateDatabaseOptions;
   /** Host-prepared non-secret environment and store projection exclusions. */
   preparedRunEnvironment?: PreparedGitHubToolEnvironment;
   autoReviewer?: ExecAutoReviewer;
