@@ -1654,17 +1654,13 @@ export async function processGatewayAllowlist(
               assertCurrent,
               beforeSpawn: async () => {
                 const secretDenied = await params.beforeSpawnSecretAuthority?.();
-                if (secretDenied) {
-                  return secretDenied;
-                }
+                if (secretDenied) return secretDenied;
                 finalBindingDenied = await resolveGatewayExecApprovalDrift({
                   binding: approvalMutableFileBinding,
                   cwdSnapshot: approvedCwdSnapshot,
                   cwd: params.workdir,
                 });
-                if (finalBindingDenied) {
-                  throw finalBindingDeniedError;
-                }
+                if (finalBindingDenied) throw finalBindingDeniedError;
                 return undefined;
               },
             });
