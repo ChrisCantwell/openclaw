@@ -2,7 +2,7 @@ import { resolveAgentConfig } from "../agents/agent-scope-config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeExactAllowedHost } from "./exact-hostname.js";
 import { revalidateAssignedSecretNames } from "./exec-store-snapshot.js";
-import type { readSecretStoreExecEnvironment } from "./store/secret-store-shared.js";
+import type { readSecretStoreExecEnvironment } from "./store/secret-store-exec-environment.js";
 import { getSecretStoreEntryMetadata } from "./store/secret-store.js";
 
 /**

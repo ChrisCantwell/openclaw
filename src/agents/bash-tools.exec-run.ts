@@ -32,6 +32,10 @@ import { normalizeDeliveryContext } from "../utils/delivery-context.shared.js";
 import { captureAgentToolSourceExecutionGuard } from "./agent-tool-source-execution-guard.js";
 import { markBackgrounded } from "./bash-process-registry.js";
 import { describeExecTool } from "./bash-tools.descriptions.js";
+import {
+  assertLocalExecWorkdir,
+  resolveGatewayGitHubProfileDir,
+} from "./bash-tools.exec-gateway-launch.js";
 import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import {
@@ -499,7 +503,7 @@ export function createExecTool(
         }
 
         assertLocalExecWorkdir(workdir);
-        const githubProfileDir = resolveGatewayGithubProfileDir({ host, preparedRunEnvironment });
+        const githubProfileDir = resolveGatewayGitHubProfileDir({ host, preparedRunEnvironment });
 
         if (host === "gateway" && !bypassApprovals) {
           const gatewayResult = await processGatewayAllowlist({
@@ -550,6 +554,7 @@ export function createExecTool(
             processContinuationAvailable: allowBackground,
             trustedSafeBinDirs,
             beforeSpawnSecretAuthority: buildPreSpawnSecretAuthorityRecheck({
+              gatewayRevalidate: undefined,
               secretEgressEnabled,
               resolveStoreEnv,
               ...secretAuthority,
