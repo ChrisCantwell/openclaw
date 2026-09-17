@@ -54,6 +54,9 @@ export type SecretEgressSentinelBinding = Readonly<{
   allowedHosts: readonly string[];
 }>;
 
+/** Synchronous live policy check performed at the final substitution boundary. */
+export type SecretEgressLiveAuthority = (params: { name: string; host: string }) => boolean;
+
 export type SecretEgressProxyHandle = {
   caCertPath: string;
   proxyOrigin: string;
@@ -61,6 +64,7 @@ export type SecretEgressProxyHandle = {
   registerRun: (
     run: Readonly<{ instanceId: string; runId: string }>,
     bindings?: readonly SecretEgressSentinelBinding[],
+    liveAuthority?: SecretEgressLiveAuthority,
   ) => Record<string, string>;
   revokeRun: (run: Readonly<{ instanceId: string; runId: string }>) => void;
   stop: () => Promise<void>;
@@ -70,6 +74,7 @@ type ConnectTarget = { hostname: string; port: number };
 type RegisteredRun = {
   key: string;
   sentinelBindings: Map<string, { allowedHosts: Set<string>; name: string }>;
+  liveAuthority?: SecretEgressLiveAuthority;
   token: Buffer;
   isActive: () => boolean;
   resources: Set<Readable | Writable>;
@@ -154,6 +159,18 @@ function resolveRegisteredSentinel(params: {
       host: params.host,
       secretName: binding.name,
     });
+  }
+  try {
+    if (
+      params.registered.liveAuthority &&
+      !params.registered.liveAuthority({ name: binding.name, host: params.host })
+    ) {
+      return undefined;
+    }
+  } catch {
+    // Store/config reads are authority inputs. A failed live read must never
+    // turn a registration snapshot into a durable credential grant.
+    return undefined;
   }
   return resolveSecretSentinel(params.sentinel);
 }
@@ -612,7 +629,7 @@ export async function startSecretEgressProxyServer(params: {
     caCertPath: certificates.caCertPath,
     proxyOrigin,
     getCertificateStatus: certificates.getStatus,
-    registerRun: (run, bindings = []) => {
+    registerRun: (run, bindings = [], liveAuthority) => {
       if (stopped) {
         throw new Error("Secret egress proxy has stopped");
       }
@@ -638,6 +655,7 @@ export async function startSecretEgressProxyServer(params: {
           },
         ]),
       );
+      registered.liveAuthority = liveAuthority;
       // Basic is deliberately used because curl and Go net/http derive it from
       // proxy-URL credentials. Base64 is acceptable here: loopback is the only
       // listener, the token is run-scoped, and a process that can read it from

@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { revalidateSecretEgressBindingAtRequest } from "../secrets/exec-store-egress-authority.js";
 import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store-shared.js";
 import type { ExecToolDetails } from "./bash-tools.exec-types.js";
 import type { AgentToolResult } from "./runtime/index.js";
@@ -124,6 +125,7 @@ export async function armSecretEgressForLaunch(params: {
       sentinel: string;
       allowedHosts: string[];
     }>,
+    liveAuthority: (params: { name: string; host: string }) => boolean,
   ) => Record<string, string>;
   revalidate: SecretAuthorityRevalidate;
 }): Promise<Record<string, string> | undefined> {
@@ -145,5 +147,12 @@ export async function armSecretEgressForLaunch(params: {
   return params.registerRun(
     params.operationalRunInstance,
     params.storeEnv.secretEgressBindings ?? [],
+    ({ name, host }) =>
+      revalidateSecretEgressBindingAtRequest({
+        name,
+        host,
+        agentId: params.agentId,
+        config: params.config,
+      }),
   );
 }

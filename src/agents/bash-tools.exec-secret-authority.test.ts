@@ -97,7 +97,11 @@ describe("armSecretEgressForLaunch", () => {
       cwd: "/tmp",
     });
     expect(env).toEqual({ PROXY: "1" });
-    expect(registerRun).toHaveBeenCalledWith(runInstance, [binding("API_KEY")]);
+    expect(registerRun).toHaveBeenCalledWith(
+      runInstance,
+      [binding("API_KEY")],
+      expect.any(Function),
+    );
   });
 
   it("returns undefined when egress is not enabled", async () => {

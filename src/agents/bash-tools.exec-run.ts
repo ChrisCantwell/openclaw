@@ -497,14 +497,8 @@ export function createExecTool(
           });
         }
 
-        if (!workdir) {
-          throw new Error("exec internal error: local execution requires a resolved workdir");
-        }
-
-        const githubProfileDir =
-          host === "gateway" && preparedRunEnvironment.managedLocalIdentity
-            ? preparedRunEnvironment.localIdentityEnv.GH_CONFIG_DIR
-            : undefined;
+        assertLocalExecWorkdir(workdir);
+        const githubProfileDir = resolveGatewayGithubProfileDir({ host, preparedRunEnvironment });
 
         if (host === "gateway" && !bypassApprovals) {
           const beforeSpawnSecretAuthority = buildPreSpawnSecretAuthorityRecheck({

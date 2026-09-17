@@ -8,6 +8,7 @@ import {
   openOpenClawStateDatabase,
 } from "../../state/openclaw-state-db.js";
 import { writeAgentSecretAssignment } from "../assignment-store.js";
+import { revalidateSecretEgressBindingAtRequest } from "../exec-store-egress-authority.js";
 import {
   readAssignedSecretStoreExecEnvironment,
   revalidateAssignedSecretNames,
@@ -27,7 +28,10 @@ function createDatabaseOptions() {
 }
 
 function configWith(mode: "off" | "advisory" | "enforce"): OpenClawConfig {
-  return { secrets: { agentAssignmentEnforcement: mode } } as OpenClawConfig;
+  return {
+    agents: { list: [{ id: "agent-a" }] },
+    secrets: { agentAssignmentEnforcement: mode },
+  } as OpenClawConfig;
 }
 
 /**
@@ -514,5 +518,56 @@ describe("pre-effect authority revalidation", () => {
         database,
       }),
     ).toEqual({ ok: true });
+  });
+
+  it("revalidates live egress authority across assignment, policy, deletion, and agent removal", () => {
+    const database = createDatabaseOptions();
+    const config = configWith("enforce");
+    seed(database);
+    const check = () =>
+      revalidateSecretEgressBindingAtRequest({
+        name: "ASSIGNED_SECRET",
+        host: "api.example.test",
+        agentId: "agent-a",
+        config,
+        database,
+      });
+
+    expect(check()).toBe(true);
+    const db = openOpenClawStateDatabase(database).db;
+    db.prepare("DELETE FROM agent_secret_assignments WHERE secret_name = ?").run("ASSIGNED_SECRET");
+    expect(check()).toBe(false);
+
+    writeAgentSecretAssignment({
+      agentId: "agent-a",
+      secretName: "ASSIGNED_SECRET",
+      assignedBy: "test",
+      database,
+    });
+    db.prepare("UPDATE secret_store_entries SET allowed_hosts = ? WHERE name = ?").run(
+      JSON.stringify(["other.example.test"]),
+      "ASSIGNED_SECRET",
+    );
+    expect(check()).toBe(false);
+
+    db.prepare("UPDATE secret_store_entries SET audience = ? WHERE name = ?").run(
+      "all",
+      "ASSIGNED_SECRET",
+    );
+    db.prepare("DELETE FROM secret_store_entries WHERE name = ?").run("ASSIGNED_SECRET");
+    expect(check()).toBe(false);
+
+    writeSecretStoreEntry({
+      scope: team,
+      name: "ASSIGNED_SECRET",
+      value: "restored-secret-value",
+      kind: "secret",
+      audience: "selected",
+      allowedHosts: ["api.example.test"],
+      updatedBy: "test",
+      database,
+    });
+    config.agents = { list: [] };
+    expect(check()).toBe(false);
   });
 });

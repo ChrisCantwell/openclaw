@@ -1,5 +1,9 @@
 import { resolveGlobalSingleton } from "../../shared/global-singleton.js";
-import type { SecretEgressProxyHandle, SecretEgressSentinelBinding } from "./proxy-server.js";
+import type {
+  SecretEgressLiveAuthority,
+  SecretEgressProxyHandle,
+  SecretEgressSentinelBinding,
+} from "./proxy-server.js";
 
 type SecretEgressProxyRegistryState = { activeProxy?: SecretEgressProxyHandle };
 const SECRET_EGRESS_PROXY_REGISTRY_KEY = Symbol.for("openclaw.secretEgressProxy.registry");
@@ -39,10 +43,11 @@ export function getSecretEgressCertificateStatus() {
 export function registerSecretEgressProxyRun(
   run: Readonly<{ instanceId: string; runId: string }>,
   bindings: readonly SecretEgressSentinelBinding[],
+  liveAuthority?: SecretEgressLiveAuthority,
 ): Record<string, string> {
   const proxy = getSecretEgressProxyRegistry().activeProxy;
   if (!proxy) {
     throw new Error("Secret egress proxy is not active in this Gateway process");
   }
-  return proxy.registerRun(run, bindings);
+  return proxy.registerRun(run, bindings, liveAuthority);
 }

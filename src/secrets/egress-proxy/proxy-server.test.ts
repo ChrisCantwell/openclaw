@@ -52,14 +52,19 @@ function registerSentinel(params: {
   allowedHosts: readonly string[];
   name?: string;
   targetProxy?: SecretEgressProxyHandle;
+  liveAuthority?: (params: { name: string; host: string }) => boolean;
 }): Record<string, string> {
-  return (params.targetProxy ?? proxy).registerRun(run, [
-    {
-      name: params.name ?? "SERVICE_API_KEY",
-      sentinel: params.sentinel,
-      allowedHosts: params.allowedHosts,
-    },
-  ]);
+  return (params.targetProxy ?? proxy).registerRun(
+    run,
+    [
+      {
+        name: params.name ?? "SERVICE_API_KEY",
+        sentinel: params.sentinel,
+        allowedHosts: params.allowedHosts,
+      },
+    ],
+    params.liveAuthority,
+  );
 }
 
 function copyInitialCa(sourceDir: string, targetDir: string): void {
@@ -645,7 +650,7 @@ describe("secret egress proxy", () => {
     await expect(
       requestThroughTunnel({
         caPath: lockdownProxy.caCertPath,
-        headers: { Authorization: `Bearer ${sentinel}` },
+        headers: { Authorization: "Bearer " + sentinel },
         proxyEnv: registerSentinel({
           sentinel,
           allowedHosts: ["localhost"],
@@ -675,7 +680,7 @@ describe("secret egress proxy", () => {
 
     const result = await requestThroughTunnel({
       caPath: restrictedProxy.caCertPath,
-      headers: { Authorization: `Bearer ${sentinel}` },
+      headers: { Authorization: "Bearer " + sentinel },
       proxyEnv: registerSentinel({
         sentinel,
         allowedHosts: ["api.example.com"],
@@ -701,7 +706,7 @@ describe("secret egress proxy", () => {
     expect(fs.statSync(path.join(caDir, "root-ca-key.pem")).mode & 0o777).toBe(0o600);
 
     await expect(
-      requestThroughTunnel({ headers: { Authorization: `Bearer ${sentinel}` } }),
+      requestThroughTunnel({ headers: { Authorization: "Bearer " + sentinel } }),
     ).resolves.toMatchObject({ body: "ok", status: 200 });
 
     expect(originRequests).toHaveLength(1);
@@ -710,6 +715,48 @@ describe("secret egress proxy", () => {
     expect(auditEvents).toContainEqual(
       expect.objectContaining({ kind: "forwarded", host: "localhost", substituted: true }),
     );
+  });
+
+  it("rechecks live authority at substitution without exposing revoked credentials", async () => {
+    const secret = "live-authority-credential";
+    const sentinel = mintSecretSentinel(secret, { label: "live-authority" });
+    const checks: Array<{ host: string; name: string }> = [];
+    let authorized = true;
+    proxyEnv = registerSentinel({
+      sentinel,
+      allowedHosts: ["localhost"],
+      liveAuthority: (params) => {
+        checks.push(params);
+        return authorized;
+      },
+    });
+
+    await expect(
+      requestThroughTunnel({ headers: { Authorization: "Bearer " + sentinel } }),
+    ).resolves.toMatchObject({ body: "ok", status: 200 });
+    expect(originRequests).toHaveLength(1);
+
+    authorized = false;
+    const revoked = await requestThroughTunnel({
+      headers: { Authorization: "Bearer " + sentinel },
+    });
+    expect(revoked).toMatchObject({ status: 502 });
+    expect(revoked.body).not.toContain(secret);
+    expect(originRequests).toHaveLength(1);
+
+    const unassigned = mintSecretSentinel("unassigned-credential", { label: "unassigned" });
+    proxyEnv = registerSentinel({
+      sentinel: unassigned,
+      allowedHosts: ["localhost"],
+      liveAuthority: () => false,
+    });
+    const denied = await requestThroughTunnel({
+      headers: { Authorization: "Bearer " + unassigned },
+    });
+    expect(denied).toMatchObject({ status: 502 });
+    expect(denied.body).not.toContain("unassigned-credential");
+    expect(originRequests).toHaveLength(1);
+    expect(checks).toContainEqual({ host: "localhost", name: "SERVICE_API_KEY" });
   });
 
   it.each([
@@ -727,7 +774,7 @@ describe("secret egress proxy", () => {
       });
 
       const result = await requestThroughTunnel({
-        headers: { Authorization: `Bearer ${sentinel}` },
+        headers: { Authorization: "Bearer " + sentinel },
       });
 
       expect(result).toMatchObject({ status: 502 });
@@ -813,7 +860,7 @@ describe("secret egress proxy", () => {
     await expect(
       requestThroughTunnel({
         caPath: proxy.caCertPath,
-        headers: { Authorization: `Bearer ${sentinel}` },
+        headers: { Authorization: "Bearer " + sentinel },
         proxyEnv: bypassEnv,
       }),
     ).resolves.toMatchObject({ status: 200 });
