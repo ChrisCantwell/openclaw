@@ -148,6 +148,8 @@ Each entry lists the package, distribution route, and description.
 
 - **[runway](/plugins/reference/runway)** (`@openclaw/runway-provider`) - included in OpenClaw. Adds video generation provider support.
 
+- **[secret-assignment-broker](/plugins/reference/secret-assignment-broker)** (`@openclaw/secret-assignment-broker`) - included in OpenClaw. Per-agent secret-store assignment policy for the exec projection, enforced through the host secret_env_authorize seam.
+
 - **[senseaudio](/plugins/reference/senseaudio)** (`@openclaw/senseaudio-provider`) - included in OpenClaw. Adds media understanding provider support.
 
 - **[session-share](/plugins/reference/session-share)** (`@openclaw/session-share`) - included in OpenClaw. Read-only OpenClaw sessions on paired gateways.
