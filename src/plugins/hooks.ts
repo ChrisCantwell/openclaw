@@ -60,6 +60,9 @@ import type {
   PluginHookBeforeMessageWriteResult,
   PluginHookResolveExecEnvContext,
   PluginHookResolveExecEnvEvent,
+  PluginHookSecretEnvAuthorizeContext,
+  PluginHookSecretEnvAuthorizeEvent,
+  PluginHookSecretEnvAuthorizeResult,
   PluginHookSkillContext,
   PluginHookSkillProposalEvaluateEvent,
   PluginHookSkillProposalEvaluateResult,
@@ -152,6 +155,7 @@ const DEFAULT_MODIFYING_HOOK_TIMEOUT_MS_BY_HOOK: Partial<Record<PluginHookName, 
   message_sending: 15_000,
   reply_payload_sending: 15_000,
   resolve_exec_env: 15_000,
+  secret_env_authorize: 15_000,
   skill_proposal_evaluate: 120_000,
 };
 
@@ -1470,6 +1474,28 @@ export function createHookRunner(
     return result ?? {};
   }
 
+  async function runSecretEnvAuthorize(
+    event: PluginHookSecretEnvAuthorizeEvent,
+    ctx: PluginHookSecretEnvAuthorizeContext,
+  ): Promise<PluginHookSecretEnvAuthorizeResult | undefined> {
+    return await runModifyingHook<"secret_env_authorize", PluginHookSecretEnvAuthorizeResult>(
+      "secret_env_authorize",
+      event,
+      ctx,
+      {
+        // Most-restrictive wins: intersect every handler's authorized set so a
+        // policy plugin can only narrow what core resolved, never widen it.
+        mergeResults: (acc, next) => {
+          const nextNames = new Set(next.allowedNames);
+          if (!acc) {
+            return { allowedNames: [...nextNames] };
+          }
+          return { allowedNames: acc.allowedNames.filter((name) => nextNames.has(name)) };
+        },
+      },
+    );
+  }
+
   // =========================================================================
   // Utility
   // =========================================================================
@@ -1609,6 +1635,7 @@ export function createHookRunner(
       terminalLabel: "block=true",
     }),
     runResolveExecEnv,
+    runSecretEnvAuthorize,
     // Utility
     hasHooks,
     getHookCount,

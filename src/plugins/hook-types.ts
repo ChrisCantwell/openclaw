@@ -144,7 +144,8 @@ export type PluginHookName =
   | "reply_dispatch"
   | "before_install"
   | "before_agent_run"
-  | "resolve_exec_env";
+  | "resolve_exec_env"
+  | "secret_env_authorize";
 
 const PLUGIN_HOOK_NAMES = [
   "before_model_resolve",
@@ -189,6 +190,7 @@ const PLUGIN_HOOK_NAMES = [
   "before_install",
   "before_agent_run",
   "resolve_exec_env",
+  "secret_env_authorize",
 ] as const satisfies readonly PluginHookName[];
 
 type MissingPluginHookNames = Exclude<PluginHookName, (typeof PLUGIN_HOOK_NAMES)[number]>;
@@ -1047,6 +1049,26 @@ export type PluginHookResolveExecEnvEvent = {
 
 export type PluginHookResolveExecEnvContext = PluginHookAgentContext;
 
+/** One resolved store entry in the projection, identified by name and kind only. */
+export type PluginHookSecretEnvCandidate = { name: string; kind: "secret" | "env" };
+
+export type PluginHookSecretEnvAuthorizeEvent = {
+  toolName: "exec";
+  host: "gateway" | "sandbox" | "node";
+  sessionKey?: string;
+  /** Resolved store-entry names for this run; never carries values. */
+  candidates: readonly PluginHookSecretEnvCandidate[];
+};
+
+export type PluginHookSecretEnvAuthorizeContext = PluginHookAgentContext;
+
+/**
+ * Result for secret_env_authorize. `allowedNames` narrows the projection to the
+ * intersection of every handler's set; a handler that returns nothing adds no
+ * constraint. Handlers can only ever restrict the projection, never widen it.
+ */
+export type PluginHookSecretEnvAuthorizeResult = { allowedNames: readonly string[] };
+
 export type PluginHookHandlerMap = {
   agent_turn_prepare: (
     event: PluginAgentTurnPrepareEvent,
@@ -1228,6 +1250,13 @@ export type PluginHookHandlerMap = {
     event: PluginHookResolveExecEnvEvent,
     ctx: PluginHookResolveExecEnvContext,
   ) => Promise<Record<string, string> | void> | Record<string, string> | void;
+  secret_env_authorize: (
+    event: PluginHookSecretEnvAuthorizeEvent,
+    ctx: PluginHookSecretEnvAuthorizeContext,
+  ) =>
+    | Promise<PluginHookSecretEnvAuthorizeResult | void>
+    | PluginHookSecretEnvAuthorizeResult
+    | void;
 };
 
 export type PluginHookRegistration<K extends PluginHookName = PluginHookName> = {

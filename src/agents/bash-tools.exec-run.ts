@@ -31,6 +31,7 @@ import { normalizeDeliveryContext } from "../utils/delivery-context.shared.js";
 import { captureAgentToolSourceExecutionGuard } from "./agent-tool-source-execution-guard.js";
 import { markBackgrounded } from "./bash-process-registry.js";
 import { describeExecTool } from "./bash-tools.descriptions.js";
+import { composeBeforeSpawnChecks } from "./bash-tools.exec-approval-output.js";
 import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import {
@@ -57,6 +58,7 @@ import {
   shouldSkipExecScriptPreflight,
   validateScriptFileForShellBleed,
 } from "./bash-tools.exec-script-preflight.js";
+import { authorizeSecretEnvForExec } from "./bash-tools.exec-secret-authorize.js";
 import {
   attachExecApprovalReview,
   buildExecForegroundResult,
@@ -415,7 +417,22 @@ export function createExecTool(
         }
 
         const resolvedExecEnvState = requestPreparation.getResolvedExecEnvPreparedState(params);
-        const storeEnv = await resolveStoreEnv();
+        // Assignment authorization runs after resolution and before the executable
+        // env snapshot. The policy hook sees candidate names only, narrows only,
+        // and fails closed on error, timeout, or a policy that returns no decision.
+        const secretEnvAuthorization = await authorizeSecretEnvForExec({
+          storeEnv: await resolveStoreEnv(),
+          host,
+          workdir,
+          agentId,
+          sessionKey: defaults?.sessionKey,
+          sessionId: defaults?.sessionId,
+        });
+        if (secretEnvAuthorization.denied) {
+          discardPreparedSandboxWorkdir?.();
+          return secretEnvAuthorization.denied;
+        }
+        const storeEnv = secretEnvAuthorization.storeEnv;
         // The proxy is loopback-owned by the Gateway. Sandbox and node hosts
         // cannot use its sentinels, so both sides of the contract stay absent.
         const useSecretEgress = secretEgressEnabled && host === "gateway";
@@ -601,7 +618,10 @@ export function createExecTool(
           processContinuationAvailable: allowBackground,
           startupSignal: signal,
           onUpdate,
-          beforeSpawn: gatewayApproval?.revalidateBeforeExecution,
+          beforeSpawn: composeBeforeSpawnChecks(
+            gatewayApproval?.revalidateBeforeExecution,
+            secretEnvAuthorization.beforeSpawn,
+          ),
           assertCurrent: gatewayApproval?.assertCurrent,
           onSettledBeforeNotify: settlement.settle,
         });
