@@ -127,7 +127,22 @@ export async function authorizeSecretEnvProjection(params: {
     return { ok: false };
   }
   if (firstDecision.kind === "no-hooks") {
-    return { ok: true, storeEnv: params.storeEnv };
+    const recheck = async (): Promise<string | undefined> => {
+      let live: Decision;
+      try {
+        live = await decide({ event, ctx: params.ctx });
+      } catch {
+        return "secret assignment policy failed to re-validate this run";
+      }
+      if (live.kind === "no-decision") {
+        return "secret assignment policy produced no decision on re-validation";
+      }
+      if (live.kind === "decision" && [...names].some((name) => !live.allowed.has(name))) {
+        return "secret assignment policy revoked one or more entries for this run";
+      }
+      return undefined;
+    };
+    return { ok: true, storeEnv: params.storeEnv, recheck };
   }
   if (firstDecision.kind === "no-decision") {
     return { ok: false };

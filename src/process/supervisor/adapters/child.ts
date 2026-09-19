@@ -244,9 +244,14 @@ export async function createChildAdapter(
                 async (launch) => {
                   await launchGate.promise;
                   const current = assertCurrent();
-                  if (current) await current;
+                  if (current) {
+                    await current;
+                  }
                   const admission = params.beforeSpawn?.();
-                  if (admission) await admission;
+                  if (admission) {
+                    await admission;
+                  }
+                  assertCurrent();
                   launch();
                 },
               );
@@ -263,8 +268,16 @@ export async function createChildAdapter(
         : {}),
       assertCurrent: () => {
         const current = assertCurrent();
-        if (current) return current.then(() => params.beforeSpawn?.());
-        return params.beforeSpawn?.();
+        const admit = () => params.beforeSpawn?.();
+        if (current) {
+          return current.then(async () => {
+            await admit();
+            assertCurrent();
+          });
+        }
+        return Promise.resolve(admit()).then(() => {
+          assertCurrent();
+        });
       },
       argv: [preparedSpawn.command, ...preparedSpawn.args],
       options,

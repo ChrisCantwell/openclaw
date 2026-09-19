@@ -67,7 +67,7 @@ export async function createPtyAdapter(
       abortSignal: params.abortSignal,
       assertCurrent: () => {
         params.assertCurrent?.();
-        params.beforeSpawn?.();
+        return params.beforeSpawn?.();
       },
     },
   );

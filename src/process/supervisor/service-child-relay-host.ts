@@ -103,7 +103,9 @@ export async function createServiceChildRelayAdapter(
   }
   params.assertCurrent?.();
   const admission = params.beforeSpawn?.();
-  if (admission) await admission;
+  if (admission) {
+    await admission;
+  }
   const { child, cleanup, transportReady } = spawnServiceChildRelay({
     entrypoint: useWindowsJobAnchor
       ? runtimeProcessEntrypoints.serviceChildWindowsJobAnchor
@@ -648,8 +650,14 @@ export async function createServiceChildRelayAdapter(
       if (params.abortSignal?.aborted) {
         onConstructionAbort();
       }
-      const admission = params.beforeSpawn?.();
-      if (admission) await admission;
+      const relayAdmission = params.beforeSpawn?.();
+      if (relayAdmission) {
+        await relayAdmission;
+      }
+      params.assertCurrent?.();
+      if (params.abortSignal?.aborted) {
+        throw new Error("service child construction aborted");
+      }
       await Promise.race([sendChildMessage(start), constructionAbort.promise]);
       params.assertCurrent?.();
       const [startupResult, secretDeliveryResult] = await Promise.allSettled([

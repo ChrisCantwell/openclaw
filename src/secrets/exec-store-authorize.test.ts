@@ -63,7 +63,10 @@ describe("authorizeSecretEnvProjection", () => {
       host: "gateway",
       ctx: CTX,
     });
-    expect(result).toEqual({ ok: true, storeEnv: input });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.recheck).toBeTypeOf("function");
+    }
   });
 
   it("plugin-disabled compatibility: a runner without the hook also leaves it unchanged", async () => {
@@ -74,7 +77,25 @@ describe("authorizeSecretEnvProjection", () => {
       host: "gateway",
       ctx: CTX,
     });
-    expect(result).toEqual({ ok: true, storeEnv: input });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.recheck).toBeTypeOf("function");
+    }
+  });
+
+  it("pending activation: a hook registered while approval waits is enforced at launch", async () => {
+    getGlobalHookRunner.mockReturnValue(null);
+    const result = await authorizeSecretEnvProjection({
+      storeEnv: storeEnv(),
+      host: "gateway",
+      ctx: CTX,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok || !result.recheck) {
+      throw new Error("expected recheck");
+    }
+    getGlobalHookRunner.mockReturnValue(runner({ allowedNames: ["ENV_A"] }));
+    await expect(result.recheck()).resolves.toContain("revoked");
   });
 
   it("fail-closed: a registered hook that returns no decision denies the projection", async () => {
