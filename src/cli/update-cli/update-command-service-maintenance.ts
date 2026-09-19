@@ -252,6 +252,8 @@ type ManagedServiceStopParams = {
   shouldRestart: boolean;
   jsonMode: boolean;
   phase?: "inspect" | "prepare";
+  /** Package/helper root can differ from the inspected service during a rebind. */
+  handoffRoot?: string;
   handoffFromGateway?: (state: GatewayServiceState) => Promise<boolean>;
   expectedService?: Pick<
     PreManagedServiceStop,
@@ -317,17 +319,16 @@ async function stopManagedServiceBeforeMutableUpdate(
     assertNative?.();
     assertExecutor();
   };
-  // A Linux systemd scope changes cgroup ownership, not Unix ancestry. Reprove
-  // the exact current handoff lease at each boundary that can stop its ancestor.
+  // Detached helpers can retain Gateway ancestry or inherited service metadata.
+  // Reprove their current handoff lease at every boundary that can stop the Gateway.
   const resolveAncestryBlock = async (state: GatewayServiceState) => {
     const blockMessage = gatewayMaintenanceBlockMessage(state, params.root);
     if (
       !blockMessage ||
-      ((params.phase === "inspect" || process.platform === "linux") &&
-        (await isCurrentManagedServiceUpdateHandoffProcess({
-          root: params.root,
-          runId: params.updateRun?.runId,
-        })))
+      (await isCurrentManagedServiceUpdateHandoffProcess({
+        root: params.handoffRoot ?? params.root,
+        runId: params.updateRun?.runId,
+      }))
     ) {
       return undefined;
     }
@@ -562,6 +563,9 @@ async function stopManagedServiceBeforeMutableUpdate(
       env: currentState.env,
       stdout: params.jsonMode ? JSON_MODE_SERVICE_STDOUT : process.stdout,
       assertCurrent,
+      ...(updateRun
+        ? { updateHandoff: { root: params.handoffRoot ?? params.root, runId: updateRun.runId } }
+        : {}),
       // Native stop may unload the service before a later port check fails.
       onMutation: () => params.onStopped?.({ ...inspected, stopped: true, stoppedAtMs }),
     });

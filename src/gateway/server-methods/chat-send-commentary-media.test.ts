@@ -173,6 +173,8 @@ describe("webchat commentary media", () => {
           ? { spawnedCwd: worktree, spawnedBy: "agent:main:main", sessionRoot: worktree }
           : {}),
       });
+      // Prepare the shared media store before the download-sequencing checks.
+      expect(await listManagedImageRecordEntries({ sessionKey: scope.sessionKey })).toEqual([]);
       if (scenario === "unrelated-rewrite") {
         expect(
           appendTranscriptMessageSync(scope, {
@@ -231,7 +233,7 @@ describe("webchat commentary media", () => {
           clientRunId: runId,
           sessionLoadOptions: { agentId: "main" },
         },
-        userTurnRecorder: { markBlocked: vi.fn() },
+        userTurnRecorder: { markBlocked: vi.fn(), getAdmissionReceipt: () => undefined },
       });
       const content = [
         {

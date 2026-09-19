@@ -712,7 +712,6 @@ extensions/memory-core/src/memory/manager-search-orchestration.ts	1
 extensions/memory-core/src/memory/manager-search.ts	6
 extensions/memory-core/src/memory/manager-sync-base.ts	3
 extensions/memory-core/src/memory/manager-vector-rebuild-state.ts	1
-extensions/memory-core/src/memory/manager-watch-ops.ts	4
 extensions/memory-core/src/memory/manager.ts	2
 extensions/memory-core/src/memory/search-deadline.ts	1
 extensions/memory-core/src/migration/doctor-host-event-sources.ts	1
@@ -2496,7 +2495,6 @@ src/config/sessions/session-reset-boundary-event.ts	5
 src/config/sessions/session-snapshot-merge.ts	26
 src/config/sessions/session-sqlite-target.ts	3
 src/config/sessions/session-store-config.ts	2
-src/config/sessions/session-transcript-projection-rebuild.ts	6
 src/config/sessions/session-transcript-reconcile.worker.ts	1
 src/config/sessions/skill-prompt-blobs.ts	5
 src/config/sessions/store-entry-shape.ts	2
@@ -3036,9 +3034,8 @@ src/media-generation/provider-registry.ts	1
 src/media-understanding/attachments.select.ts	1
 src/media-understanding/entry-capabilities.ts	1
 src/media-understanding/image-model-runtime.ts	3
-src/media-understanding/runner.entries.ts	7
+src/media-understanding/runner.entries.ts	6
 src/media-understanding/runner.ts	1
-src/media-understanding/runtime.ts	2
 src/media-understanding/shared.ts	2
 src/media/audio-transcode.ts	1
 src/media/bounded-read-file.ts	2
@@ -3078,7 +3075,7 @@ src/node-host/invoke-agent-cli-claude-params.ts	4
 src/node-host/invoke-agent-cli-claude.ts	1
 src/node-host/invoke-file-commands.ts	1
 src/node-host/invoke-payload.ts	5
-src/node-host/invoke.ts	4
+src/node-host/invoke.ts	3
 src/node-host/mcp.ts	3
 src/node-host/node-worker-bundle-installer.ts	1
 src/node-host/node-worker-transfer-client.ts	1
@@ -3270,7 +3267,7 @@ src/plugins/runtime/channel-runtime-contexts.ts	1
 src/plugins/runtime/runtime-agent.ts	1
 src/plugins/runtime/runtime-channel.ts	1
 src/plugins/runtime/runtime-llm-isolated.ts	3
-src/plugins/runtime/runtime-llm.runtime.ts	4
+src/plugins/runtime/runtime-llm.runtime.ts	1
 src/plugins/schema-validator.ts	6
 src/plugins/sdk-alias.ts	1
 src/plugins/session-catalog-history-import.ts	1
@@ -3388,7 +3385,7 @@ src/skills/workshop/store-sqlite-event.ts	1
 src/skills/workshop/tool-policy-diagnostic.ts	1
 src/snapshot/git-backup-codec.ts	9
 src/snapshot/git-backup.ts	2
-src/snapshot/local-repository.ts	8
+src/snapshot/local-repository.ts	7
 src/snapshot/manifest.ts	1
 src/state/agent-deletion-journal.ts	15
 src/state/backup-run-records.ts	1
@@ -3397,7 +3394,7 @@ src/state/local-onboarding-state.ts	1
 src/state/openclaw-agent-board-schema.ts	1
 src/state/openclaw-agent-db-permissions.ts	1
 src/state/openclaw-agent-db-registry-listing.ts	3
-src/state/openclaw-agent-db-registry.ts	5
+src/state/openclaw-agent-db-registry.ts	1
 src/state/openclaw-agent-db-schema.ts	2
 src/state/openclaw-agent-db-session-migrations.ts	4
 src/state/openclaw-agent-db-session-provenance.ts	2
@@ -3762,7 +3759,7 @@ ui/src/pages/plugin/route.ts	1
 ui/src/pages/portals/portal-reachability.ts	1
 ui/src/pages/profile/identity-section.ts	2
 ui/src/pages/secrets/view.ts	5
-ui/src/pages/sessions/view.ts	13
+ui/src/pages/sessions/view.ts	12
 ui/src/pages/skill-workshop/route.ts	1
 ui/src/pages/skill-workshop/self-learning.ts	1
 ui/src/pages/skill-workshop/view.ts	1

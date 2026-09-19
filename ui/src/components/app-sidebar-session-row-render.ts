@@ -7,7 +7,6 @@ import type { SessionObserverDigest } from "../../../packages/gateway-protocol/s
 import { normalizeSessionColorValue } from "../../../packages/gateway-protocol/src/session-agent-status.js";
 import type { GatewaySessionRow } from "../api/types.ts";
 import type { NavigationRouteId } from "../app-navigation.ts";
-import { withSidebarNavCollapseIntent } from "../app-session-route-paths.ts";
 import { sessionHasPendingApproval } from "../app/approval-presentation.ts";
 import type { ApplicationContext, ApplicationNavigationOptions } from "../app/context.ts";
 import { resolveControlUiAuthCandidates } from "../app/control-ui-auth.ts";
@@ -100,7 +99,7 @@ export interface SessionListHost {
   readonly sessionOwnerFilterId: string | null;
   readonly sessionInvolvingMeFilterActive: boolean;
   readonly sessionOwnerOptions: readonly SessionOwnerOption[];
-  readonly sessionOwnershipVisible: boolean;
+  readonly sessionOwnershipVisibility: { filters: boolean; avatars: boolean };
   readonly onOpenNewSession?: (agentId: string, target?: NewSessionTarget) => void;
   readonly onNavigate?: (
     routeId: NavigationRouteId,
@@ -185,7 +184,7 @@ function renderSidebarSessionIndicators(
       : session.owner?.assignedAt !== undefined
         ? "owned"
         : "created";
-  const ownerActor = host.sessionOwnershipVisible
+  const ownerActor = host.sessionOwnershipVisibility.avatars
     ? host.sessionsStatusFilter === "archived"
       ? session.archivedBy
       : session.owner?.actor
@@ -294,7 +293,6 @@ function renderSidebarSessionIndicators(
       ${team && session.hasAutomation ? html`<span class="session-row-badge" role="img" aria-label=${t("tabs.cron")} title=${t("tabs.cron")}>${icons.clock}</span>` : nothing}
       ${renderSessionRowBadges({
         isChild: session.isChild,
-        workspaceKind: session.workspaceKind,
         incognito: session.incognito,
         placementState: session.placementState,
         placementProviderId: session.placementProviderId,
@@ -446,7 +444,7 @@ export function renderRecentSession(params: {
       @keydown=${openMenuFromEvent}
     >
       <a
-        href=${withSidebarNavCollapseIntent(host.sidebarSessionHref(session))}
+        href=${host.sidebarSessionHref(session)}
         class="sidebar-recent-session__link"
         draggable="false"
         aria-current=${session.visuallyActive ? "page" : nothing}

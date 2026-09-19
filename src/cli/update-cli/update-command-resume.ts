@@ -22,7 +22,7 @@ import { hasCommandProcessCleanupError } from "../../process/exec-result.js";
 import { withCommandProcessScope } from "../../process/exec-spawn.js";
 import { defaultRuntime } from "../../runtime.js";
 import { VERSION } from "../../version.js";
-import { readPackageVersion, type UpdateCommandOptions } from "./shared.js";
+import { parseUpdateTimeoutMs, readPackageVersion, type UpdateCommandOptions } from "./shared.js";
 import {
   preparePostCorePluginConfig,
   persistValidatedDowngradeConfig,
@@ -41,6 +41,7 @@ import {
 import {
   postCoreUpdateParentOwnsCompletion,
   readPostCorePluginInstallRecordsFile,
+  resolvePostCoreUpdateOperatorOptions,
   resolvePostCoreUpdateStartedAtMs,
   writePostCorePluginUpdateResultFile,
   writePostCoreUpdateFailureFile,
@@ -56,7 +57,11 @@ type ResumePostCoreUpdateParams = {
 
 export async function resumePostCoreUpdate(params: ResumePostCoreUpdateParams): Promise<void> {
   try {
-    await resumePostCoreUpdateInternal(params);
+    const opts = await resolvePostCoreUpdateOperatorOptions({
+      opts: params.opts,
+      resultPath: process.env[POST_CORE_UPDATE_RESULT_PATH_ENV],
+    });
+    await resumePostCoreUpdateInternal({ ...params, opts });
   } catch (error) {
     // Publish only after phase cleanup releases its leases. The parent owns
     // recovery and triage; inherited TTY output cannot serve as its error record.
@@ -300,6 +305,7 @@ export async function convergePostCoreUpdatePlugins(params: {
       json: params.opts.json,
       acceptCapabilities: params.opts.acceptCapabilities,
       timeoutMs: params.timeoutMs,
+      workTimeoutMs: parseUpdateTimeoutMs(params.opts.timeout) ?? null,
       pluginInstallRecords,
       assertCurrent,
     });
