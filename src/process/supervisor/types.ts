@@ -63,7 +63,7 @@ export type SpawnSecretInput = {
 export type ProcessAdapterConstruction = {
   assertCurrent?: () => void;
   /** Synchronous launch admission; never recheck after the target command starts. */
-  beforeSpawn?: () => void;
+  beforeSpawn?: () => void | Promise<void>;
   abortSignal?: AbortSignal;
   /** Publish resource cleanup before readiness or private-input delivery can fail. */
   onSpawnCleanup?: (cleanup: Promise<ProcessExtinctionResult>) => void;
@@ -114,7 +114,7 @@ type SpawnBaseInput = {
   /** Revalidate the caller at deferred spawn and private-input delivery boundaries. */
   assertCurrent?: () => void;
   /** Revalidate launch policy at admission and immediately before each native launch attempt. */
-  beforeSpawn?: () => void;
+  beforeSpawn?: () => void | Promise<void>;
   runId?: string;
   scopeKey?: string;
   replaceExistingScope?: boolean;

@@ -918,7 +918,14 @@ export async function runExecProcess({
     assertCurrent();
     assertHostPolicyCurrent?.();
     return withoutGatewayToolCallerIdentity(() =>
-      supervisor.spawn({ ...input, assertCurrent, beforeSpawn: assertHostPolicyCurrent }),
+      supervisor.spawn({
+        ...input,
+        assertCurrent,
+        beforeSpawn: async () => {
+          await beforeSpawn?.();
+          assertHostPolicyCurrent?.();
+        },
+      }),
     );
   };
 
