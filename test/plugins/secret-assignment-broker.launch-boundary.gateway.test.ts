@@ -147,17 +147,19 @@ describe.skipIf(process.platform === "win32")("secret-assignment broker launch b
     });
   }
 
-  it("delivers only the assigned entry to the real child process", async () => {
+  it("delivers only the assigned entry and withholds the sibling from the real child process", async () => {
     const keyed = registerBroker();
     await keyed.register("agent-assigned", { mode: "selected", names: ["DEPLOY_ENV_A"] });
 
     const result = await gatewayExec("agent-assigned").execute("launch-assigned", {
-      command: 'printf "[%s]" "$DEPLOY_ENV_A"',
+      // Prints the assigned entry and the unassigned sibling so the real child
+      // outcome shows both the delivered and the withheld effect.
+      command: 'printf "[%s][%s]" "$DEPLOY_ENV_A" "$DEPLOY_ENV_B"',
       yieldMs: 120_000,
     });
 
     expect(result.details.status).toBe("completed");
-    expect(result.details.aggregated).toBe("[synthetic-a]");
+    expect(result.details.aggregated).toBe("[synthetic-a][]");
   });
 
   it("withholds every store entry from an unassigned agent's real child process", async () => {

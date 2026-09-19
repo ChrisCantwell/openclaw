@@ -125,7 +125,7 @@ export async function spawnTerminalPty(
     args: params.args,
     env: env ?? process.env,
   });
-  assertCurrent();
+  await assertCurrent();
   const pty = spawn(invocation.file, invocation.args, {
     name: terminalName,
     cols: params.cols,
