@@ -74,7 +74,20 @@ export async function createPtyAdapter(
           await current;
         }
         const admission = params.beforeSpawn?.();
-        return admission ? await admission : undefined;
+        if (admission) {
+          await admission;
+        }
+        // Policy admission is asynchronous and may revoke or abort caller startup
+        // authority while it is pending. Recheck both fences immediately before
+        // returning control to the native launch owner, so a caller whose authority
+        // was revoking during the awaited admission cannot still spawn a PTY.
+        const recheck = params.assertCurrent?.();
+        if (recheck) {
+          await recheck;
+        }
+        if (params.abortSignal?.aborted) {
+          throw new Error("PTY construction aborted");
+        }
       },
     },
   );

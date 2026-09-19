@@ -450,6 +450,77 @@ describe("createPtyAdapter", () => {
     }
   });
 
+  it("does not reach the native PTY launch when caller authority is revoked during pending admission", async () => {
+    const admissionStarted = createDeferredCore();
+    const admission = createDeferredCore();
+    const nativeLaunch = vi.fn();
+    let authorityActive = true;
+    // Faithful native boundary: the real spawnTerminalPty awaits the adapter's
+    // authority/policy fence immediately before spawning the PTY.
+    spawnMock.mockImplementation(
+      async (_params: unknown, lifecycle: { assertCurrent?: () => unknown }) => {
+        await lifecycle.assertCurrent?.();
+        nativeLaunch();
+        return createStubPty();
+      },
+    );
+
+    const starting = createPtyAdapter({
+      shell: "bash",
+      args: ["-lc", "echo should-not-run"],
+      assertCurrent: () => {
+        if (!authorityActive) {
+          throw new Error("caller startup authority revoked");
+        }
+      },
+      beforeSpawn: () => {
+        admissionStarted.resolve();
+        return admission.promise;
+      },
+    });
+
+    await admissionStarted.promise;
+    // Policy admission is still pending; revoke caller startup authority now.
+    authorityActive = false;
+    admission.resolve();
+
+    await expect(starting).rejects.toThrow("caller startup authority revoked");
+    expect(nativeLaunch).not.toHaveBeenCalled();
+    expect(ptyKillMock).not.toHaveBeenCalled();
+  });
+
+  it("does not reach the native PTY launch when construction aborts during pending admission", async () => {
+    const admissionStarted = createDeferredCore();
+    const admission = createDeferredCore();
+    const nativeLaunch = vi.fn();
+    const abort = new AbortController();
+    spawnMock.mockImplementation(
+      async (_params: unknown, lifecycle: { assertCurrent?: () => unknown }) => {
+        await lifecycle.assertCurrent?.();
+        nativeLaunch();
+        return createStubPty();
+      },
+    );
+
+    const starting = createPtyAdapter({
+      shell: "bash",
+      args: ["-lc", "echo should-not-run"],
+      abortSignal: abort.signal,
+      beforeSpawn: () => {
+        admissionStarted.resolve();
+        return admission.promise;
+      },
+    });
+
+    await admissionStarted.promise;
+    abort.abort();
+    admission.resolve();
+
+    await expect(starting).rejects.toThrow("PTY construction aborted");
+    expect(nativeLaunch).not.toHaveBeenCalled();
+    expect(ptyKillMock).not.toHaveBeenCalled();
+  });
+
   it("uses process-tree kill for SIGKILL on Windows", async () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, "platform");
     Object.defineProperty(process, "platform", { value: "win32", configurable: true });
