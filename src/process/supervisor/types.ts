@@ -61,7 +61,7 @@ export type SpawnSecretInput = {
 };
 
 export type ProcessAdapterConstruction = {
-  assertCurrent?: () => void;
+  assertCurrent?: () => void | Promise<void>;
   /** Synchronous launch admission; never recheck after the target command starts. */
   beforeSpawn?: () => void | Promise<void>;
   abortSignal?: AbortSignal;
@@ -112,7 +112,7 @@ type SpawnBaseInput = {
   /** The local subprocess transports execution owned outside its local process tree. */
   cleanupOwnership?: "external";
   /** Revalidate the caller at deferred spawn and private-input delivery boundaries. */
-  assertCurrent?: () => void;
+  assertCurrent?: () => void | Promise<void>;
   /** Revalidate launch policy at admission and immediately before each native launch attempt. */
   beforeSpawn?: () => void | Promise<void>;
   runId?: string;

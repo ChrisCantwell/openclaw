@@ -922,7 +922,10 @@ export async function runExecProcess({
         ...input,
         assertCurrent,
         beforeSpawn: async () => {
-          await beforeSpawn?.();
+          const denied = await beforeSpawn?.();
+          if (denied) {
+            throw new ExecProcessPreflightError(denied);
+          }
           assertHostPolicyCurrent?.();
         },
       }),

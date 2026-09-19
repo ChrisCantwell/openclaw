@@ -215,7 +215,10 @@ export function createProcessSupervisor(): ProcessSupervisor & {
     // A queued replacement must still own authority before stopping the surviving run.
     if (!owner.terminationReason) {
       input.assertCurrent?.();
-      await input.beforeSpawn?.();
+      const admission = input.beforeSpawn?.();
+      if (admission) {
+        await admission;
+      }
       // Native PTY has no tree-extinction owner. Reject before spawning so exec's
       // existing PTY-unavailable fallback can run once under the child anchor.
       if (input.mode === "pty" && requireProcessTree) {
@@ -268,7 +271,17 @@ export function createProcessSupervisor(): ProcessSupervisor & {
       return settleConstructionResult(owner.terminationReason);
     }
     input.assertCurrent?.();
-    await input.beforeSpawn?.();
+    const admission = input.beforeSpawn?.();
+    if (admission) {
+      await admission;
+      // Admission is async and may cancel or revoke the replacement while it is
+      // waiting. Recheck both fences immediately before touching the surviving
+      // scope or constructing a native adapter.
+      if (owner.terminationReason) {
+        return settleConstructionResult(owner.terminationReason);
+      }
+      input.assertCurrent?.();
+    }
 
     if (input.replaceExistingScope && scopeKey) {
       // Scope admission already waited for predecessor startups. Do not

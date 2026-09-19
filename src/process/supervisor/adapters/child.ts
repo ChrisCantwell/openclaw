@@ -218,10 +218,11 @@ export async function createChildAdapter(
   };
 
   const assertCurrent = () => {
-    params.assertCurrent?.();
+    const current = params.assertCurrent?.();
     if (params.abortSignal?.aborted) {
       throw new Error("child construction aborted");
     }
+    return current;
   };
   let windowsJob: ManagedWindowsJob | undefined;
   let windowsCleanup: Promise<WindowsJobExtinction> | undefined;
@@ -242,8 +243,10 @@ export async function createChildAdapter(
                 { ...spawnOptions, signal: params.abortSignal },
                 async (launch) => {
                   await launchGate.promise;
-                  assertCurrent();
-                  params.beforeSpawn?.();
+                  const current = assertCurrent();
+                  if (current) await current;
+                  const admission = params.beforeSpawn?.();
+                  if (admission) await admission;
                   launch();
                 },
               );
@@ -259,8 +262,9 @@ export async function createChildAdapter(
           }
         : {}),
       assertCurrent: () => {
-        assertCurrent();
-        params.beforeSpawn?.();
+        const current = assertCurrent();
+        if (current) return current.then(() => params.beforeSpawn?.());
+        return params.beforeSpawn?.();
       },
       argv: [preparedSpawn.command, ...preparedSpawn.args],
       options,
