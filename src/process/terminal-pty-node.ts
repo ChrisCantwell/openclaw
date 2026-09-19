@@ -53,6 +53,7 @@ export async function spawnNodeTerminalPty(
       return;
     }
     startupError ??= error;
+    ready.reject(error);
     if (child.connected) {
       child.disconnect();
     }
@@ -128,10 +129,12 @@ export async function spawnNodeTerminalPty(
       return;
     }
     if (message.type === "boot") {
-      void Promise.resolve(beforeSpawn?.()).then(
-        () => send({ type: "start", params }),
-        (error) => fail(toErrorObject(error, "PTY launch denied")),
-      );
+      void Promise.resolve()
+        .then(() => beforeSpawn?.())
+        .then(
+          () => send({ type: "start", params }),
+          (error) => fail(toErrorObject(error, "PTY launch denied")),
+        );
     } else if (message.type === "ready") {
       ptyPid = message.pid;
       if (!startupError) {
