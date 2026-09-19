@@ -272,6 +272,12 @@ public enum TaskSuggestionResolution: String, Codable, Sendable {
     case expired = "expired"
 }
 
+public enum ThemeMode: String, Codable, Sendable {
+    case system = "system"
+    case light = "light"
+    case dark = "dark"
+}
+
 public enum WorkerDesktopAppId: String, Codable, Sendable {
     case browser = "browser"
     case terminal = "terminal"
@@ -4868,6 +4874,62 @@ public struct ConnectParams: Codable, Sendable {
     }
 }
 
+public struct ControlUiLinkReaderDescriptor: Codable, Sendable {
+    public let pluginid: String
+    public let id: String
+    public let label: String
+    public let icon: String?
+    public let linkreader: ControlUiLinkReaderMetadata
+
+    public init(
+        pluginid: String,
+        id: String,
+        label: String,
+        icon: String? = nil,
+        linkreader: ControlUiLinkReaderMetadata)
+    {
+        self.pluginid = pluginid
+        self.id = id
+        self.label = label
+        self.icon = icon
+        self.linkreader = linkreader
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case pluginid = "pluginId"
+        case id
+        case label
+        case icon
+        case linkreader = "linkReader"
+    }
+}
+
+public struct ControlUiLinkReaderMetadata: Codable, Sendable {
+    public let hosts: [String]
+    public let pathpattern: String
+    public let detailmethod: String
+    public let previewmethod: String?
+
+    public init(
+        hosts: [String],
+        pathpattern: String,
+        detailmethod: String,
+        previewmethod: String? = nil)
+    {
+        self.hosts = hosts
+        self.pathpattern = pathpattern
+        self.detailmethod = detailmethod
+        self.previewmethod = previewmethod
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case hosts
+        case pathpattern = "pathPattern"
+        case detailmethod = "detailMethod"
+        case previewmethod = "previewMethod"
+    }
+}
+
 public struct ControlUiPluginTab: Codable, Sendable {
     public let pluginid: String
     public let id: String
@@ -8317,6 +8379,7 @@ public struct HelloOk: Codable, Sendable {
     public let controluiurl: String?
     public let controluitabs: [ControlUiPluginTab]?
     public let controluiwidgetkinds: [ControlUiPluginWidgetKind]?
+    public let controluilinkreaders: [ControlUiLinkReaderDescriptor]?
     public let pluginsurfaceurls: [String: AnyCodable]?
     public let auth: [String: AnyCodable]
     public let policy: [String: AnyCodable]
@@ -8330,6 +8393,7 @@ public struct HelloOk: Codable, Sendable {
         controluiurl: String? = nil,
         controluitabs: [ControlUiPluginTab]? = nil,
         controluiwidgetkinds: [ControlUiPluginWidgetKind]? = nil,
+        controluilinkreaders: [ControlUiLinkReaderDescriptor]? = nil,
         pluginsurfaceurls: [String: AnyCodable]? = nil,
         auth: [String: AnyCodable],
         policy: [String: AnyCodable])
@@ -8342,6 +8406,7 @@ public struct HelloOk: Codable, Sendable {
         self.controluiurl = controluiurl
         self.controluitabs = controluitabs
         self.controluiwidgetkinds = controluiwidgetkinds
+        self.controluilinkreaders = controluilinkreaders
         self.pluginsurfaceurls = pluginsurfaceurls
         self.auth = auth
         self.policy = policy
@@ -8356,6 +8421,7 @@ public struct HelloOk: Codable, Sendable {
         case controluiurl = "controlUiUrl"
         case controluitabs = "controlUiTabs"
         case controluiwidgetkinds = "controlUiWidgetKinds"
+        case controluilinkreaders = "controlUiLinkReaders"
         case pluginsurfaceurls = "pluginSurfaceUrls"
         case auth
         case policy
@@ -10214,6 +10280,7 @@ public struct PluginControlUiDescriptor: Codable, Sendable {
     public let pluginid: String
     public let pluginname: String?
     public let surface: AnyCodable
+    public let linkreader: ControlUiLinkReaderMetadata?
     public let label: String
     public let description: String?
     public let icon: String?
@@ -10229,6 +10296,7 @@ public struct PluginControlUiDescriptor: Codable, Sendable {
         pluginid: String,
         pluginname: String? = nil,
         surface: AnyCodable,
+        linkreader: ControlUiLinkReaderMetadata? = nil,
         label: String,
         description: String? = nil,
         icon: String? = nil,
@@ -10243,6 +10311,7 @@ public struct PluginControlUiDescriptor: Codable, Sendable {
         self.pluginid = pluginid
         self.pluginname = pluginname
         self.surface = surface
+        self.linkreader = linkreader
         self.label = label
         self.description = description
         self.icon = icon
@@ -10259,6 +10328,7 @@ public struct PluginControlUiDescriptor: Codable, Sendable {
         case pluginid = "pluginId"
         case pluginname = "pluginName"
         case surface
+        case linkreader = "linkReader"
         case label
         case description
         case icon
@@ -11442,6 +11512,7 @@ public struct PluginsUiDescriptorsResult: Codable, Sendable {
     public let methods: [String]?
     public let controluitabs: [ControlUiPluginTab]?
     public let controluiwidgetkinds: [ControlUiPluginWidgetKind]?
+    public let controluilinkreaders: [ControlUiLinkReaderDescriptor]?
     public let pluginsurfaceurls: [String: AnyCodable]?
 
     public init(
@@ -11451,6 +11522,7 @@ public struct PluginsUiDescriptorsResult: Codable, Sendable {
         methods: [String]? = nil,
         controluitabs: [ControlUiPluginTab]? = nil,
         controluiwidgetkinds: [ControlUiPluginWidgetKind]? = nil,
+        controluilinkreaders: [ControlUiLinkReaderDescriptor]? = nil,
         pluginsurfaceurls: [String: AnyCodable]? = nil)
     {
         self.ok = ok
@@ -11459,6 +11531,7 @@ public struct PluginsUiDescriptorsResult: Codable, Sendable {
         self.methods = methods
         self.controluitabs = controluitabs
         self.controluiwidgetkinds = controluiwidgetkinds
+        self.controluilinkreaders = controluilinkreaders
         self.pluginsurfaceurls = pluginsurfaceurls
     }
 
@@ -11469,6 +11542,7 @@ public struct PluginsUiDescriptorsResult: Codable, Sendable {
         case methods
         case controluitabs = "controlUiTabs"
         case controluiwidgetkinds = "controlUiWidgetKinds"
+        case controluilinkreaders = "controlUiLinkReaders"
         case pluginsurfaceurls = "pluginSurfaceUrls"
     }
 }
@@ -17120,6 +17194,8 @@ public struct SessionsListParams: Codable, Sendable {
     public let includeglobal: Bool?
     public let includeunknown: Bool?
     public let excludesubagents: Bool?
+    public let excludecron: Bool?
+    public let excludesystem: Bool?
     public let configuredagentsonly: Bool?
     public let includederivedtitles: Bool?
     public let includelastmessage: Bool?
@@ -17153,6 +17229,8 @@ public struct SessionsListParams: Codable, Sendable {
         includeglobal: Bool? = nil,
         includeunknown: Bool? = nil,
         excludesubagents: Bool? = nil,
+        excludecron: Bool? = nil,
+        excludesystem: Bool? = nil,
         configuredagentsonly: Bool? = nil,
         includederivedtitles: Bool? = nil,
         includelastmessage: Bool? = nil,
@@ -17185,6 +17263,8 @@ public struct SessionsListParams: Codable, Sendable {
         self.includeglobal = includeglobal
         self.includeunknown = includeunknown
         self.excludesubagents = excludesubagents
+        self.excludecron = excludecron
+        self.excludesystem = excludesystem
         self.configuredagentsonly = configuredagentsonly
         self.includederivedtitles = includederivedtitles
         self.includelastmessage = includelastmessage
@@ -17219,6 +17299,8 @@ public struct SessionsListParams: Codable, Sendable {
         case includeglobal = "includeGlobal"
         case includeunknown = "includeUnknown"
         case excludesubagents = "excludeSubagents"
+        case excludecron = "excludeCron"
+        case excludesystem = "excludeSystem"
         case configuredagentsonly = "configuredAgentsOnly"
         case includederivedtitles = "includeDerivedTitles"
         case includelastmessage = "includeLastMessage"
@@ -17988,17 +18070,20 @@ public struct SessionsSearchHit: Codable, Sendable {
 public struct SessionsSearchParams: Codable, Sendable {
     public let agentid: String?
     public let sessionkeys: [String]?
+    public let scope: [String: AnyCodable]?
     public let query: String
     public let limit: Int?
 
     public init(
         agentid: String? = nil,
         sessionkeys: [String]? = nil,
+        scope: [String: AnyCodable]? = nil,
         query: String,
         limit: Int? = nil)
     {
         self.agentid = agentid
         self.sessionkeys = sessionkeys
+        self.scope = scope
         self.query = query
         self.limit = limit
     }
@@ -18006,6 +18091,7 @@ public struct SessionsSearchParams: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case agentid = "agentId"
         case sessionkeys = "sessionKeys"
+        case scope
         case query
         case limit
     }
@@ -18013,17 +18099,20 @@ public struct SessionsSearchParams: Codable, Sendable {
 
 public struct SessionsSearchResult: Codable, Sendable {
     public let results: [SessionsSearchHit]
+    public let sessions: [SessionRow]?
     public let indexing: Bool?
     public let archivedtranscriptsexcluded: Int?
     public let truncated: Bool?
 
     public init(
         results: [SessionsSearchHit],
+        sessions: [SessionRow]? = nil,
         indexing: Bool? = nil,
         archivedtranscriptsexcluded: Int? = nil,
         truncated: Bool? = nil)
     {
         self.results = results
+        self.sessions = sessions
         self.indexing = indexing
         self.archivedtranscriptsexcluded = archivedtranscriptsexcluded
         self.truncated = truncated
@@ -18031,6 +18120,7 @@ public struct SessionsSearchResult: Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case results
+        case sessions
         case indexing
         case archivedtranscriptsexcluded = "archivedTranscriptsExcluded"
         case truncated
@@ -18164,6 +18254,7 @@ public struct SessionsUsageParams: Codable, Sendable {
     public let key: String?
     public let agentid: String?
     public let agentscope: String?
+    public let creatorkey: String?
     public let startdate: String?
     public let enddate: String?
     public let mode: AnyCodable?
@@ -18179,6 +18270,7 @@ public struct SessionsUsageParams: Codable, Sendable {
         key: String? = nil,
         agentid: String? = nil,
         agentscope: String? = nil,
+        creatorkey: String? = nil,
         startdate: String? = nil,
         enddate: String? = nil,
         mode: AnyCodable? = nil,
@@ -18193,6 +18285,7 @@ public struct SessionsUsageParams: Codable, Sendable {
         self.key = key
         self.agentid = agentid
         self.agentscope = agentscope
+        self.creatorkey = creatorkey
         self.startdate = startdate
         self.enddate = enddate
         self.mode = mode
@@ -18209,6 +18302,7 @@ public struct SessionsUsageParams: Codable, Sendable {
         case key
         case agentid = "agentId"
         case agentscope = "agentScope"
+        case creatorkey = "creatorKey"
         case startdate = "startDate"
         case enddate = "endDate"
         case mode
@@ -21418,21 +21512,25 @@ public struct TaskSuggestionsAcceptParams: Codable, Sendable {
     public let taskid: String
     public let mode: String?
     public let cloudprofileid: String?
+    public let cwd: String?
 
     public init(
         taskid: String,
         mode: String? = nil,
-        cloudprofileid: String? = nil)
+        cloudprofileid: String? = nil,
+        cwd: String? = nil)
     {
         self.taskid = taskid
         self.mode = mode
         self.cloudprofileid = cloudprofileid
+        self.cwd = cwd
     }
 
     private enum CodingKeys: String, CodingKey {
         case taskid = "taskId"
         case mode
         case cloudprofileid = "cloudProfileId"
+        case cwd
     }
 }
 
@@ -21701,6 +21799,19 @@ public struct TaskSummary: Codable, Sendable {
         case terminaloutcome = "terminalOutcome"
         case result
         case prompt
+    }
+}
+
+public struct TaskWorktreeSourceRequiredErrorDetails: Codable, Sendable {
+    public let code: String
+    public let cwd: String
+
+    public init(
+        code: String,
+        cwd: String)
+    {
+        self.code = code
+        self.cwd = cwd
     }
 }
 
@@ -22252,6 +22363,166 @@ public struct TerminalUploadResult: Codable, Sendable {
         case path
         case size
         case uploadpathstyle = "uploadPathStyle"
+    }
+}
+
+public struct ThemeDefinition: Codable, Sendable {
+    public let name: String
+    public let description: String
+    public let light: ThemePalette?
+    public let dark: ThemePalette?
+
+    public init(
+        name: String,
+        description: String,
+        light: ThemePalette? = nil,
+        dark: ThemePalette? = nil)
+    {
+        self.name = name
+        self.description = description
+        self.light = light
+        self.dark = dark
+    }
+}
+
+public struct ThemePalette: Codable, Sendable {
+    public let background: String
+    public let foreground: String
+    public let card: String
+    public let cardForeground: String
+    public let popover: String
+    public let popoverForeground: String
+    public let primary: String
+    public let primaryForeground: String
+    public let secondary: String
+    public let secondaryForeground: String
+    public let muted: String
+    public let mutedForeground: String
+    public let accent: String
+    public let accentForeground: String
+    public let destructive: String
+    public let destructiveForeground: String
+    public let border: String
+    public let input: String
+    public let ring: String
+    public let fontSans: String?
+    public let fontMono: String?
+
+    public init(
+        background: String,
+        foreground: String,
+        card: String,
+        cardForeground: String,
+        popover: String,
+        popoverForeground: String,
+        primary: String,
+        primaryForeground: String,
+        secondary: String,
+        secondaryForeground: String,
+        muted: String,
+        mutedForeground: String,
+        accent: String,
+        accentForeground: String,
+        destructive: String,
+        destructiveForeground: String,
+        border: String,
+        input: String,
+        ring: String,
+        fontSans: String? = nil,
+        fontMono: String? = nil)
+    {
+        self.background = background
+        self.foreground = foreground
+        self.card = card
+        self.cardForeground = cardForeground
+        self.popover = popover
+        self.popoverForeground = popoverForeground
+        self.primary = primary
+        self.primaryForeground = primaryForeground
+        self.secondary = secondary
+        self.secondaryForeground = secondaryForeground
+        self.muted = muted
+        self.mutedForeground = mutedForeground
+        self.accent = accent
+        self.accentForeground = accentForeground
+        self.destructive = destructive
+        self.destructiveForeground = destructiveForeground
+        self.border = border
+        self.input = input
+        self.ring = ring
+        self.fontSans = fontSans
+        self.fontMono = fontMono
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case background
+        case foreground
+        case card
+        case cardForeground = "card-foreground"
+        case popover
+        case popoverForeground = "popover-foreground"
+        case primary
+        case primaryForeground = "primary-foreground"
+        case secondary
+        case secondaryForeground = "secondary-foreground"
+        case muted
+        case mutedForeground = "muted-foreground"
+        case accent
+        case accentForeground = "accent-foreground"
+        case destructive
+        case destructiveForeground = "destructive-foreground"
+        case border
+        case input
+        case ring
+        case fontSans = "font-sans"
+        case fontMono = "font-mono"
+    }
+}
+
+public struct ThemesGetParams: Codable, Sendable {
+    public let id: String?
+
+    public init(
+        id: String? = nil)
+    {
+        self.id = id
+    }
+}
+
+public struct ThemesImportParams: Codable, Sendable {
+    public let id: String
+    public let definition: ThemeDefinition
+    public let apply: Bool?
+    public let mode: ThemeMode?
+
+    public init(
+        id: String,
+        definition: ThemeDefinition,
+        apply: Bool? = nil,
+        mode: ThemeMode? = nil)
+    {
+        self.id = id
+        self.definition = definition
+        self.apply = apply
+        self.mode = mode
+    }
+}
+
+public struct ThemesListParams: Codable, Sendable {}
+
+public struct ThemesSetParams: Codable, Sendable {
+    public let id: AnyCodable?
+    public let mode: AnyCodable?
+    public let appearance: [String: AnyCodable]?
+
+    public init(
+        id: AnyCodable? = nil,
+        mode: AnyCodable? = nil,
+        appearance: [String: AnyCodable]? = nil)
+    {
+        self.id = id
+        self.mode = mode
+        self.appearance = appearance
     }
 }
 
@@ -23205,6 +23476,16 @@ public struct TranscriptsStatusResult: Codable, Sendable {
         case active
         case latesttranscript = "latestTranscript"
         case omitted
+    }
+}
+
+public struct TranscriptsSummarizeParams: Codable, Sendable {
+    public let selector: String
+
+    public init(
+        selector: String)
+    {
+        self.selector = selector
     }
 }
 
@@ -27279,6 +27560,7 @@ public enum GatewayErrorDetails: Codable, Sendable {
     case setupAdmissionBusy(SetupAdmissionBusyErrorDetails)
     case githubPublicationSelectionRejected(GitHubPublicationSelectionRejectedErrorDetails)
     case sessionWorkspaceRecoveryRequired(SessionWorkspaceRecoveryRequiredErrorDetails)
+    case taskWorktreeSourceRequired(TaskWorktreeSourceRequiredErrorDetails)
 
     public init(code: String, missingscope: String, requiredscopes: [String]) {
         self = .missingScope(
@@ -27304,6 +27586,7 @@ public enum GatewayErrorDetails: Codable, Sendable {
         case .setupAdmissionBusy(let value): value.code
         case .githubPublicationSelectionRejected(let value): value.code
         case .sessionWorkspaceRecoveryRequired(let value): value.code
+        case .taskWorktreeSourceRequired(let value): value.code
         }
     }
 
@@ -27337,6 +27620,7 @@ public enum GatewayErrorDetails: Codable, Sendable {
         case "SETUP_ADMISSION_BUSY": self = try .setupAdmissionBusy(SetupAdmissionBusyErrorDetails(from: decoder))
         case "GITHUB_PUBLICATION_SELECTION_REJECTED": self = try .githubPublicationSelectionRejected(GitHubPublicationSelectionRejectedErrorDetails(from: decoder))
         case "SESSION_WORKSPACE_RECOVERY_REQUIRED": self = try .sessionWorkspaceRecoveryRequired(SessionWorkspaceRecoveryRequiredErrorDetails(from: decoder))
+        case "TASK_WORKTREE_SOURCE_REQUIRED": self = try .taskWorktreeSourceRequired(TaskWorktreeSourceRequiredErrorDetails(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .discriminator,
@@ -27360,6 +27644,7 @@ public enum GatewayErrorDetails: Codable, Sendable {
         case .setupAdmissionBusy(let value): try value.encode(to: encoder)
         case .githubPublicationSelectionRejected(let value): try value.encode(to: encoder)
         case .sessionWorkspaceRecoveryRequired(let value): try value.encode(to: encoder)
+        case .taskWorktreeSourceRequired(let value): try value.encode(to: encoder)
         }
     }
 }

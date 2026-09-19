@@ -4,6 +4,7 @@ import type {
   TaskSuggestionEvent,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import { chatInputOwnerForContext } from "../../app/chat-input-owner.ts";
+import { availableLinkReaders } from "../../app/link-reader-routing.ts";
 import { isDesktopPanelAvailable } from "../../app/panel-availability.ts";
 import {
   disposeQuestionPromptState,
@@ -13,13 +14,13 @@ import { readPresenceEntries } from "../../app/user-profile.ts";
 import { BROWSER_ANNOTATION_EVENT } from "../../components/browser/browser-annotation.ts";
 import {
   BROWSER_PANEL_TOGGLE_EVENT,
+  LINK_READER_PANEL_TOGGLE_EVENT,
   DESKTOP_PANEL_TOGGLE_EVENT,
   PORTAL_PANEL_TOGGLE_EVENT,
   TERMINAL_PANEL_DOCK_BOTTOM_EVENT,
   TERMINAL_PANEL_TOGGLE_EVENT,
 } from "../../components/panel-toggle-contract.ts";
 import { matchesShortcutCombo } from "../../lib/keyboard-shortcut-contract.ts";
-import { sessionPullRequestsForGateway } from "../../lib/session-pull-requests.ts";
 import { parseCatalogSessionKey } from "../../lib/sessions/catalog-key.ts";
 import { resolveSessionKey } from "../../lib/sessions/index.ts";
 import {
@@ -91,7 +92,12 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionCreation {
     current: () => {
       const state = this.state;
       return state && this.active && this.presented
-        ? { renderRoot: this.renderRoot, state, updateComplete: this.updateComplete }
+        ? {
+            renderRoot: this.renderRoot,
+            state,
+            linkReaders: availableLinkReaders(this.context.gateway.snapshot),
+            updateComplete: this.updateComplete,
+          }
         : null;
     },
     pending: this.pendingPanelToggleRequests,
@@ -436,6 +442,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionCreation {
     const panelToggleEvents = [
       [TERMINAL_PANEL_TOGGLE_EVENT, "terminal", "openclaw-terminal-panel"],
       [BROWSER_PANEL_TOGGLE_EVENT, "browser", "openclaw-browser-panel"],
+      [LINK_READER_PANEL_TOGGLE_EVENT, "link-reader", "openclaw-link-reader-panel"],
       [DESKTOP_PANEL_TOGGLE_EVENT, "desktop", "openclaw-desktop-panel"],
       [PORTAL_PANEL_TOGGLE_EVENT, "portal", "openclaw-portals-page"],
     ] as const;
@@ -506,13 +513,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionCreation {
         this.activateComposerPresentation();
       }),
     );
-    const sessionPullRequests = sessionPullRequestsForGateway(this.context.gateway);
-    chatState.addCleanup(
-      sessionPullRequests.subscribe(() => {
-        void this.refreshSessionPullRequests();
-      }),
-    );
-    chatState.addCleanup(() => sessionPullRequests.unwatch(this));
+    this.subscribeSessionRepositoryContext();
     chatState.addCleanup(
       this.context.gateway.subscribeEvents((event) => {
         const state = this.state;
@@ -663,6 +664,12 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionCreation {
     const board = this.resolveBoardView();
     this.syncRetainedBoardSession(board);
     this.sessionPanelToggles.flush();
+    if (this.state) {
+      const layout = this.initializeBrowserSidebarLayout(this.state.sidebarLayout);
+      if (layout !== this.state.sidebarLayout) {
+        this.state.updateSidebarLayout(layout, { geometryOnly: true });
+      }
+    }
     this.setConversationVisible(
       Boolean(
         this.state &&

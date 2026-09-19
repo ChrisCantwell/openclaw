@@ -50,6 +50,7 @@ type StreamMessageOptions = Pick<
   | "fetchLinkFavicon"
   | "pluginToolIcons"
   | "githubRepo"
+  | "githubRepositories"
   | "onOpenWorkspaceFile"
 >;
 
@@ -193,7 +194,7 @@ export function renderWorkGroupSummary(
         }}
       >
         <span class="chat-tool-disclosure__content">
-          <span class="chat-activity-group__label" title=${label}>${label}</span>
+          <span class="chat-activity-group__label">${label}</span>
         </span>
         ${
           cards.length && duration

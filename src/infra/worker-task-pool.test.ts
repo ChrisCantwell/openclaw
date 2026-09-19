@@ -61,6 +61,23 @@ afterEach(async () => {
 });
 
 describe("worker task pool", () => {
+  it("acknowledges input custody on its channel without a host exchange and reuses the healthy worker", async () => {
+    const pool = createPool();
+    const released = vi.fn();
+    const onRequest = vi.fn(async () => {
+      throw new Error("Consumption-only task must not request host work");
+    });
+    const first = await pool.run(
+      { label: "closed", consumeInput: true },
+      { onInputConsumed: released, onRequest },
+    );
+    expect(released).toHaveBeenCalledOnce();
+    expect(onRequest).not.toHaveBeenCalled();
+    const next = await pool.run({ label: "next" }, {});
+    expect(next.threadId).toBe(first.threadId);
+    expect(workers).toHaveLength(1);
+  });
+
   it("rotates after active settlement and native exit while preserving queued order and deadlines", async () => {
     const initialCpuSources = getTrackedWorkerCpuSources();
     const pool = createPool();
@@ -285,13 +302,19 @@ describe("worker task pool", () => {
     const pool = createPool({ workerUrl, maxPendingTasks: 1 });
     const gate = createDeferredCore<PoolFixtureInput>();
     const controller = new AbortController();
-    const first = pool.run(() => gate.promise, { signal: controller.signal });
+    const executionSettled = vi.fn();
+    const first = pool.run(() => gate.promise, {
+      signal: controller.signal,
+      onExecutionSettled: executionSettled,
+    });
     const settled = Promise.allSettled([first]);
     controller.abort();
     await settled;
+    expect(executionSettled).toHaveBeenCalledExactlyOnceWith({ retired: true });
     await expect(pool.run({ label: "excess" }, {})).rejects.toMatchObject({ code: "overloaded" });
     gate.resolve({ label: "canceled" });
     await gate.promise;
+    expect(executionSettled).toHaveBeenCalledOnce();
     expect(await pool.run({ label: "recovered" }, {})).toMatchObject({ label: "recovered" });
   });
 

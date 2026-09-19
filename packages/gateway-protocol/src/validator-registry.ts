@@ -579,10 +579,15 @@ export const validateUpdateRunChangedEvent = compile(S.UpdateRunChangedEventSche
 export const validateUpdateReportParams = compile(S.UpdateReportParamsSchema);
 export const validateUpdateReportResult = compile(S.UpdateReportResultSchema);
 export const validateUiCommandParams = compile(S.UiCommandParamsSchema);
+export const validateThemesListParams = compile(S.ThemesListParamsSchema);
+export const validateThemesGetParams = compile(S.ThemesGetParamsSchema);
+export const validateThemesSetParams = compile(S.ThemesSetParamsSchema);
+export const validateThemesImportParams = compile(S.ThemesImportParamsSchema);
 export const validateWebLoginStartParams = compile(S.WebLoginStartParamsSchema);
 export const validateWebLoginWaitParams = compile(S.WebLoginWaitParamsSchema);
 
 export const validateTranscriptsListParams = compile(S.TranscriptsListParamsSchema);
+export const validateTranscriptsSummarizeParams = compile(S.TranscriptsSummarizeParamsSchema);
 export const validateTranscriptsGetParams = compile(S.TranscriptsGetParamsSchema);
 export const validateTranscriptsExportParams = compile(S.TranscriptsExportParamsSchema);
 export const validateTranscriptsStatusParams = compile(S.TranscriptsStatusParamsSchema);

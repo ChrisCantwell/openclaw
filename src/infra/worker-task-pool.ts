@@ -154,6 +154,25 @@ export class WorkerTaskPool<Input, Output> {
     };
   }
 
+  /** Join failed native retirements without interrupting healthy tasks. */
+  async retryFailedRetirements(): Promise<void> {
+    const outcomes = await Promise.allSettled(
+      [...this.slots].filter((slot) => slot.retirementFailed).map((slot) => this.retire(slot)),
+    );
+    outcomes.push(...(await Promise.allSettled(this.artifactCleanups)));
+    const errors = outcomes.flatMap((outcome) =>
+      outcome.status === "rejected"
+        ? [toErrorObject(outcome.reason, "worker retirement retry failed")]
+        : [],
+    );
+    const firstError = errors[0];
+    if (firstError) {
+      throw errors.length === 1
+        ? firstError
+        : new AggregateError(errors, "Worker retirement retries failed", { cause: firstError });
+    }
+  }
+
   /** Pause dispatch, settle current work and join native exit before restarting the queue. */
   rotate(): Promise<void> {
     if (this.rotation) {
@@ -535,6 +554,7 @@ export class WorkerTaskPool<Input, Output> {
     task.runInContext(() => task.controller.abort());
     clearTimeout(task.timer);
     task.options.signal?.removeEventListener("abort", task.abort);
+    let executionNotified = false;
     // SAFETY: Only a validated successful reply reaches finish without an error and supplies Output.
     const complete = () =>
       task.runInContext(() => {
@@ -554,6 +574,14 @@ export class WorkerTaskPool<Input, Output> {
           release?.();
         } catch (releaseError) {
           completionError ??= toErrorObject(releaseError, "worker input release failed");
+        }
+        try {
+          if (!executionNotified) {
+            executionNotified = true;
+            task.options.onExecutionSettled?.({ retired: retire });
+          }
+        } catch (settlementError) {
+          completionError ??= toErrorObject(settlementError, "worker settlement receipt failed");
         }
         const permit = task.computePermit;
         task.computePermit = undefined;
