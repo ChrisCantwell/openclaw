@@ -485,7 +485,9 @@ describe.runIf(process.platform !== "win32")("terminal PTY native authorization 
 
     await vi.waitFor(() => expect(guardEntered).toBe(true));
     // The native child must not exist while authorization is still pending.
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 150);
+    });
     expect(fs.existsSync(marker)).toBe(false);
 
     const denial = new Error("assignment revoked before native PTY spawn");
@@ -493,7 +495,9 @@ describe.runIf(process.platform !== "win32")("terminal PTY native authorization 
 
     await expect(starting).rejects.toBe(denial);
     // No native process effect after the denial.
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 150);
+    });
     expect(fs.existsSync(marker)).toBe(false);
   });
 });
