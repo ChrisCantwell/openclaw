@@ -563,6 +563,11 @@ export function createExecTool(
             cleanupMs,
             processContinuationAvailable: allowBackground,
             trustedSafeBinDirs,
+            // Carry the assignment recheck into the deferred approval owner so
+            // its detached launch re-validates live policy before spawning.
+            ...(secretEnvAuthorization.beforeSpawn
+              ? { secretEnvBeforeSpawn: secretEnvAuthorization.beforeSpawn }
+              : {}),
           });
           const immediateResult = gatewayResult.pendingResult ?? gatewayResult.deniedResult;
           if (immediateResult) {

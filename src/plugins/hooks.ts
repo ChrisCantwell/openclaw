@@ -288,6 +288,30 @@ function getHooksForNameAndPlugin<K extends PluginHookName>(
 }
 
 /**
+ * Validates one secret_env_authorize handler's decision.
+ *
+ * Returns the authorized-name set when the handler decided, or `undefined` when
+ * it returned nothing or a malformed value. A registered handler that does not
+ * decide must deny the whole projection, so the runner treats `undefined` as a
+ * terminal no-decision rather than skipping the handler.
+ */
+function readSecretEnvAuthorizeDecision(
+  value: PluginHookSecretEnvAuthorizeResult | void | null,
+): Set<string> | undefined {
+  if (!value || typeof value !== "object" || !Array.isArray(value.allowedNames)) {
+    return undefined;
+  }
+  const names = new Set<string>();
+  for (const name of value.allowedNames) {
+    if (typeof name !== "string") {
+      return undefined;
+    }
+    names.add(name);
+  }
+  return names;
+}
+
+/**
  * Create a hook runner for a specific registry.
  */
 export function createHookRunner(
@@ -1474,26 +1498,62 @@ export function createHookRunner(
     return result ?? {};
   }
 
+  /**
+   * Runs the secret_env_authorize policy hook with per-handler decision
+   * validation.
+   *
+   * Unlike the generic modifying runner, which silently skips non-deciding
+   * handlers, every registered secret_env_authorize handler MUST decide. A
+   * handler that returns nothing, returns a malformed value, throws, or times
+   * out yields no decision for the whole dispatch so the caller fails closed
+   * instead of merging a partial allow. Only when every handler decides do we
+   * return the intersection, which can only ever narrow the resolved projection.
+   */
   async function runSecretEnvAuthorize(
     event: PluginHookSecretEnvAuthorizeEvent,
     ctx: PluginHookSecretEnvAuthorizeContext,
   ): Promise<PluginHookSecretEnvAuthorizeResult | undefined> {
-    return await runModifyingHook<"secret_env_authorize", PluginHookSecretEnvAuthorizeResult>(
-      "secret_env_authorize",
-      event,
-      ctx,
-      {
-        // Most-restrictive wins: intersect every handler's authorized set so a
-        // policy plugin can only narrow what core resolved, never widen it.
-        mergeResults: (acc, next) => {
-          const nextNames = new Set(next.allowedNames);
-          if (!acc) {
-            return { allowedNames: [...nextNames] };
-          }
-          return { allowedNames: acc.allowedNames.filter((name) => nextNames.has(name)) };
-        },
-      },
+    const hooks = getHooksForName(registry, "secret_env_authorize", ctx);
+    if (hooks.length === 0) {
+      // No registered handler: core projects the resolved snapshot unchanged.
+      return undefined;
+    }
+    logger?.debug?.(
+      `[hooks] running secret_env_authorize (${hooks.length} handlers, fail-closed per handler)`,
     );
+
+    let allowed: Set<string> | undefined;
+    for (const hook of hooks) {
+      let handlerResult: PluginHookSecretEnvAuthorizeResult | void;
+      try {
+        const handler = hook.handler as (
+          event: PluginHookSecretEnvAuthorizeEvent,
+          ctx: PluginHookSecretEnvAuthorizeContext,
+        ) => Promise<PluginHookSecretEnvAuthorizeResult | void>;
+        const promise = Promise.resolve(handler(event, ctx));
+        const timeoutMs = getModifyingHookTimeoutMs(hook.hookName, hook);
+        handlerResult = timeoutMs ? await withHookTimeout(promise, timeoutMs) : await promise;
+      } catch (err) {
+        // Fail closed: a throwing or timed-out policy yields no decision.
+        handleHookError({ hookName: "secret_env_authorize", pluginId: hook.pluginId, error: err });
+        return undefined;
+      }
+      const decision = readSecretEnvAuthorizeDecision(handlerResult);
+      if (!decision) {
+        // A registered handler that does not decide denies the whole projection;
+        // no later handler may re-widen it.
+        logger?.warn(
+          `[hooks] secret_env_authorize handler from ${hook.pluginId} returned no valid decision; denying projection`,
+        );
+        return undefined;
+      }
+      allowed = allowed ? new Set([...allowed].filter((name) => decision.has(name))) : decision;
+      if (allowed.size === 0) {
+        // The intersection can only shrink; an empty set is already terminal.
+        return { allowedNames: [] };
+      }
+    }
+    return { allowedNames: [...(allowed ?? [])] };
   }
 
   // =========================================================================

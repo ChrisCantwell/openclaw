@@ -170,10 +170,17 @@ contracts above; a modifying hook is not an observation hook.
 and before it becomes the executable environment. The event carries resolved
 entry names and kinds only, never values. Each handler returns `allowedNames`
 and the runner intersects every handler's set, so a handler can only narrow
-the projection, never widen it. A handler error or timeout, or a registered
-handler that returns no decision, denies the projection (fail closed). With
-no registered handlers the snapshot is returned unchanged, so the hook is
-compatible with plugins that do not participate.
+the projection, never widen it. Every registered handler must return a valid
+decision: a handler that returns nothing or a malformed value, throws, or times
+out denies the whole projection (fail closed), so one non-deciding policy can
+never be masked by another handler's allow. With no registered handlers the
+snapshot is returned unchanged, so the hook is compatible with plugins that do
+not participate.
+
+The authorized name set is also re-checked at the command-launch boundary. For
+a Gateway approval that is answered later, the deferred launch re-validates
+live policy immediately before spawning, so an assignment revoked while the
+approval waited cannot deliver a now-revoked entry to the process.
 
 `inbound_claim` is not a global pre-routing broadcast. OpenClaw invokes it only
 for the plugin that owns the message's core-managed conversation binding. To

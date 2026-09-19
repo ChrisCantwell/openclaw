@@ -3,6 +3,7 @@
 // All entries are synthetic names; no secret value ever enters these tests.
 import { describe, expect, it } from "vitest";
 import plugin from "./index.js";
+import manifest from "./openclaw.plugin.json" with { type: "json" };
 import {
   allowedNamesForCandidate,
   applyAssignmentEdit,
@@ -237,5 +238,51 @@ describe("store", () => {
     await store.set("agent-2", { mode: "selected", names: ["X"] });
     expect(await store.get("agent-2")).toEqual({ mode: "selected", names: ["X"] });
     expect(await store.get("missing")).toEqual(EMPTY_ASSIGNMENT);
+  });
+});
+
+/**
+ * Rollout/activation semantics. These protect the compatibility contract the
+ * plugin documents: default-disabled, fail-closed on a fresh enable with no
+ * assignments, and an unchanged projection while the plugin is disabled.
+ */
+describe("rollout and activation", () => {
+  it("is disabled by default so existing installs are unaffected after upgrade", () => {
+    expect(manifest.enabledByDefault).toBe(false);
+  });
+
+  it("fresh enable with no assignments denies every resolved entry (fail closed)", async () => {
+    const { hooks } = capturePlugin();
+    for (const ctx of [{}, { agentId: "fresh-agent" }]) {
+      const result = (await hooks[0]!.handler(
+        { toolName: "exec", host: "gateway", candidates: CANDIDATES },
+        ctx,
+      )) as { allowedNames: string[] };
+      expect(result.allowedNames).toEqual([]);
+    }
+  });
+
+  it("an empty selected assignment is never global", async () => {
+    const { hooks, methods } = capturePlugin();
+    await callMethod(methods, "secrets.assignments.broker.set", {
+      agentId: "agent-1",
+      mode: "selected",
+      names: [],
+    });
+    const result = (await hooks[0]!.handler(
+      { toolName: "exec", host: "gateway", candidates: CANDIDATES },
+      { agentId: "agent-1" },
+    )) as { allowedNames: string[] };
+    expect(result.allowedNames).toEqual([]);
+  });
+
+  it("keeps the public API surface minimal (one hook, three RPCs)", () => {
+    const { hooks, methods } = capturePlugin();
+    expect(hooks).toHaveLength(1);
+    expect([...methods.keys()].toSorted()).toEqual([
+      "secrets.assignments.broker.list",
+      "secrets.assignments.broker.self",
+      "secrets.assignments.broker.set",
+    ]);
   });
 });
