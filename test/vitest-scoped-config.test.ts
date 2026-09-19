@@ -1020,6 +1020,7 @@ describe("scoped vitest configs", () => {
       "src/gateway/**/*.test.ts",
       "test/plugins/codex-model-catalog.gateway.test.ts",
       "test/plugins/secret-assignment-broker.authority-chain.gateway.test.ts",
+      "test/plugins/secret-assignment-broker.launch-boundary.gateway.test.ts",
     ]);
     expect(testConfig.exclude).toContain("src/gateway/gateway.test.ts");
     expect(testConfig.exclude).toContain(

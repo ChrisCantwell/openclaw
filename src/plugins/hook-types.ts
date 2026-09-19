@@ -1064,8 +1064,11 @@ export type PluginHookSecretEnvAuthorizeContext = PluginHookAgentContext;
 
 /**
  * Result for secret_env_authorize. `allowedNames` narrows the projection to the
- * intersection of every handler's set; a handler that returns nothing adds no
- * constraint. Handlers can only ever restrict the projection, never widen it.
+ * intersection of every handler's set, and handlers can only ever restrict the
+ * projection, never widen it. Every participating handler MUST return a valid
+ * decision: a handler that returns nothing (or a malformed value), throws, or
+ * times out denies the whole projection, so one non-deciding policy can never be
+ * masked by another handler's allow.
  */
 export type PluginHookSecretEnvAuthorizeResult = { allowedNames: readonly string[] };
 

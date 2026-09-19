@@ -2,6 +2,7 @@
 export const gatewayPluginTestFiles = [
   "test/plugins/codex-model-catalog.gateway.test.ts",
   "test/plugins/secret-assignment-broker.authority-chain.gateway.test.ts",
+  "test/plugins/secret-assignment-broker.launch-boundary.gateway.test.ts",
 ];
 
 // This curated cohort retains serial forks and the extended database-worker watchdog,
