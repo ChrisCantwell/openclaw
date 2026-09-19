@@ -35,7 +35,8 @@ withheld from the executable environment (fail closed). Assign an agent
 explicitly before enabling it, or its commands run without those variables.
 
 Assignments are stored in the host keyed store under the `agent-assignments`
-namespace, so they persist across Gateway restarts and plugin reloads. Assign
+namespace, so they persist across plugin reloads: a fresh registry binding reads
+the same keyed-store records. Assign
 per agent with `secrets.assignments.broker.set` (`none`, `selected`, or `all`);
 `secrets.assignments.broker.self` reports only the caller's own assignment and
 derives its identity from the authenticated client, never from params;

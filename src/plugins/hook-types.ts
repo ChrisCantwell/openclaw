@@ -1256,10 +1256,7 @@ export type PluginHookHandlerMap = {
   secret_env_authorize: (
     event: PluginHookSecretEnvAuthorizeEvent,
     ctx: PluginHookSecretEnvAuthorizeContext,
-  ) =>
-    | Promise<PluginHookSecretEnvAuthorizeResult | void>
-    | PluginHookSecretEnvAuthorizeResult
-    | void;
+  ) => Promise<PluginHookSecretEnvAuthorizeResult> | PluginHookSecretEnvAuthorizeResult;
 };
 
 export type PluginHookRegistration<K extends PluginHookName = PluginHookName> = {

@@ -219,6 +219,26 @@ describe("authorizeSecretEnvProjection", () => {
     await expect(result.recheck()).resolves.toBeUndefined();
   });
 
+  it("deregistered hook during recheck keeps the already-projected subset (no widening)", async () => {
+    const r = runner({ allowedNames: ["ENV_A"] });
+    getGlobalHookRunner.mockReturnValue(r);
+    const result = await authorizeSecretEnvProjection({
+      storeEnv: storeEnv(),
+      host: "gateway",
+      ctx: CTX,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok || !result.recheck) {
+      throw new Error("expected recheck");
+    }
+    // ENV_B and SEC_C were already withheld, so they must remain withheld even
+    // after the hook is deregistered mid-approval; the run never widens back to
+    // the legacy full projection.
+    expect(result.storeEnv.env).toEqual({ ENV_A: "synthetic-env-a" });
+    getGlobalHookRunner.mockReturnValue({ hasHooks: () => false });
+    await expect(result.recheck()).resolves.toBeUndefined();
+  });
+
   it("passes the derived agent identity through, never a value", async () => {
     const r = runner({ allowedNames: ["ENV_A", "ENV_B", "SEC_C"] });
     getGlobalHookRunner.mockReturnValue(r);
