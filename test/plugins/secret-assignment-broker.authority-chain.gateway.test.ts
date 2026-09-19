@@ -12,28 +12,31 @@
  * Only synthetic names and fake secret sentinels appear here; no real values.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import brokerPlugin from "../../../extensions/secret-assignment-broker/index.ts";
-import { authorizeSecretEnvForExec } from "../../agents/bash-tools.exec-secret-authorize.js";
-import { createPluginStateKeyedStoreForTests } from "../../plugin-sdk/plugin-state-test-runtime.js";
-import { resetPluginStateStoreForTests } from "../../plugin-state/plugin-state-store.js";
-import {
-  initializeGlobalHookRunner,
-  resetGlobalHookRunner,
-} from "../../plugins/hook-runner-global.js";
-import { runPluginRegisterSyncInRegistry } from "../../plugins/loader-module-runtime.js";
-import type { PluginRegistry } from "../../plugins/registry-types.js";
-import { createPluginRegistry } from "../../plugins/registry.js";
-import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../../plugins/runtime.js";
-import type { PluginRuntime } from "../../plugins/runtime/types.js";
-import { createPluginRecord } from "../../plugins/status.test-fixtures.js";
-import type { SecretStoreExecEnvironment } from "../../secrets/store/secret-store.js";
-import { withOpenClawTestState } from "../../test-utils/openclaw-test-state.js";
+import brokerPlugin from "../../extensions/secret-assignment-broker/index.js";
+import { authorizeSecretEnvForExec } from "../../src/agents/bash-tools.exec-secret-authorize.js";
 import {
   createPluginGatewayMethodDescriptors,
   createGatewayMethodRegistry,
-} from "../methods/registry.js";
-import { ADMIN_SCOPE, READ_SCOPE } from "../operator-scopes.js";
-import { handleGatewayRequest } from "../server-methods.js";
+} from "../../src/gateway/methods/registry.js";
+import { ADMIN_SCOPE, READ_SCOPE } from "../../src/gateway/operator-scopes.js";
+import { handleGatewayRequest } from "../../src/gateway/server-methods.js";
+import { createPluginStateKeyedStoreForTests } from "../../src/plugin-sdk/plugin-state-test-runtime.js";
+import { resetPluginStateStoreForTests } from "../../src/plugin-state/plugin-state-store.js";
+import {
+  initializeGlobalHookRunner,
+  resetGlobalHookRunner,
+} from "../../src/plugins/hook-runner-global.js";
+import { runPluginRegisterSyncInRegistry } from "../../src/plugins/loader-module-runtime.js";
+import type { PluginRegistry } from "../../src/plugins/registry-types.js";
+import { createPluginRegistry } from "../../src/plugins/registry.js";
+import {
+  resetPluginRuntimeStateForTest,
+  setActivePluginRegistry,
+} from "../../src/plugins/runtime.js";
+import type { PluginRuntime } from "../../src/plugins/runtime/types.js";
+import { createPluginRecord } from "../../src/plugins/status.test-fixtures.js";
+import type { SecretStoreExecEnvironment } from "../../src/secrets/store/secret-store.js";
+import { withOpenClawTestState } from "../../src/test-utils/openclaw-test-state.js";
 
 const PLUGIN_ID = "secret-assignment-broker";
 const NAMESPACE = "agent-assignments";
