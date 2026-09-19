@@ -51,7 +51,10 @@ export async function createServiceChildRelayAdapter(
   if (params.abortSignal?.aborted) {
     throw new Error("service child construction aborted");
   }
-  await params.assertCurrent?.();
+  const current = params.assertCurrent?.();
+  if (current) {
+    await current;
+  }
   const admission = params.beforeSpawn?.();
   if (admission) {
     await admission;
@@ -607,7 +610,10 @@ export async function createServiceChildRelayAdapter(
   const ready = (async () => {
     using delivery = preparation.transferSecretInput();
     try {
-      await params.assertCurrent?.();
+      const entryCurrent = params.assertCurrent?.();
+      if (entryCurrent) {
+        await entryCurrent;
+      }
       if (params.abortSignal?.aborted) {
         onConstructionAbort();
       }
@@ -615,12 +621,18 @@ export async function createServiceChildRelayAdapter(
       if (relayAdmission) {
         await relayAdmission;
       }
-      await params.assertCurrent?.();
+      const postAdmissionCurrent = params.assertCurrent?.();
+      if (postAdmissionCurrent) {
+        await postAdmissionCurrent;
+      }
       if (params.abortSignal?.aborted) {
         throw new Error("service child construction aborted");
       }
       await Promise.race([sendChildMessage(start), constructionAbort.promise]);
-      await params.assertCurrent?.();
+      const postStartCurrent = params.assertCurrent?.();
+      if (postStartCurrent) {
+        await postStartCurrent;
+      }
       const [startupResult, secretDeliveryResult] = await Promise.allSettled([
         startup.promise,
         delivery?.deliverTo(child, { abortSignal: params.abortSignal }),
@@ -639,7 +651,10 @@ export async function createServiceChildRelayAdapter(
       if (params.abortSignal?.aborted || waitError) {
         throw waitError ?? new Error("service child construction aborted");
       }
-      await params.assertCurrent?.();
+      const finalCurrent = params.assertCurrent?.();
+      if (finalCurrent) {
+        await finalCurrent;
+      }
       if (params.input !== undefined) {
         stdin?.write(params.input);
         stdin?.end();

@@ -251,7 +251,10 @@ export async function createChildAdapter(
                   if (admission) {
                     await admission;
                   }
-                  await assertCurrent();
+                  const gate = assertCurrent();
+                  if (gate) {
+                    await gate;
+                  }
                   launch();
                 },
               );
@@ -272,11 +275,17 @@ export async function createChildAdapter(
         if (current) {
           return current.then(async () => {
             await admit();
-            await assertCurrent();
+            const gate = assertCurrent();
+            if (gate) {
+              await gate;
+            }
           });
         }
         return Promise.resolve(admit()).then(async () => {
-          await assertCurrent();
+          const gate = assertCurrent();
+          if (gate) {
+            await gate;
+          }
         });
       },
       argv: [preparedSpawn.command, ...preparedSpawn.args],
@@ -755,7 +764,10 @@ export async function createChildAdapter(
         await windowsJob.ready;
       }
       // Construction may outlive admission; publish cleanup before any private input.
-      await assertCurrent();
+      const readinessGate = assertCurrent();
+      if (readinessGate) {
+        await readinessGate;
+      }
       if (params.ownedWorker !== undefined && (!child.connected || !child.channel)) {
         throw new Error("worker lifecycle IPC channel was not created");
       }
@@ -766,7 +778,10 @@ export async function createChildAdapter(
         stdin?.end();
       }
       if (params.secretInput) {
-        await assertCurrent();
+        const secretGate = assertCurrent();
+        if (secretGate) {
+          await secretGate;
+        }
         // deliverTo transfers its pipe synchronously; readiness retains the writer.
         await secretDelivery?.deliverTo(child, { abortSignal: params.abortSignal });
       }
