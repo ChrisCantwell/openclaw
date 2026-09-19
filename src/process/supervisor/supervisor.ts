@@ -214,7 +214,10 @@ export function createProcessSupervisor(): ProcessSupervisor & {
     const requireProcessTree = treeCleanupOwners.length > 0;
     // A queued replacement must still own authority before stopping the surviving run.
     if (!owner.terminationReason) {
-      await input.assertCurrent?.();
+      const current = input.assertCurrent?.();
+      if (current) {
+        await current;
+      }
       const admission = input.beforeSpawn?.();
       if (admission) {
         await admission;
@@ -270,7 +273,10 @@ export function createProcessSupervisor(): ProcessSupervisor & {
     if (owner.terminationReason) {
       return settleConstructionResult(owner.terminationReason);
     }
-    await input.assertCurrent?.();
+    const current = input.assertCurrent?.();
+    if (current) {
+      await current;
+    }
     const admission = input.beforeSpawn?.();
     if (admission) {
       await admission;
@@ -280,7 +286,10 @@ export function createProcessSupervisor(): ProcessSupervisor & {
       if (owner.terminationReason) {
         return settleConstructionResult(owner.terminationReason);
       }
-      await input.assertCurrent?.();
+      const recheck = input.assertCurrent?.();
+      if (recheck) {
+        await recheck;
+      }
     }
 
     if (input.replaceExistingScope && scopeKey) {

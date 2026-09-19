@@ -251,7 +251,7 @@ export async function createChildAdapter(
                   if (admission) {
                     await admission;
                   }
-                  assertCurrent();
+                  await assertCurrent();
                   launch();
                 },
               );
@@ -272,11 +272,11 @@ export async function createChildAdapter(
         if (current) {
           return current.then(async () => {
             await admit();
-            assertCurrent();
+            await assertCurrent();
           });
         }
-        return Promise.resolve(admit()).then(() => {
-          assertCurrent();
+        return Promise.resolve(admit()).then(async () => {
+          await assertCurrent();
         });
       },
       argv: [preparedSpawn.command, ...preparedSpawn.args],
@@ -755,7 +755,7 @@ export async function createChildAdapter(
         await windowsJob.ready;
       }
       // Construction may outlive admission; publish cleanup before any private input.
-      assertCurrent();
+      await assertCurrent();
       if (params.ownedWorker !== undefined && (!child.connected || !child.channel)) {
         throw new Error("worker lifecycle IPC channel was not created");
       }
@@ -766,7 +766,7 @@ export async function createChildAdapter(
         stdin?.end();
       }
       if (params.secretInput) {
-        assertCurrent();
+        await assertCurrent();
         // deliverTo transfers its pipe synchronously; readiness retains the writer.
         await secretDelivery?.deliverTo(child, { abortSignal: params.abortSignal });
       }

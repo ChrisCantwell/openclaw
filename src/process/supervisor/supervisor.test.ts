@@ -70,7 +70,7 @@ describe("process supervisor", () => {
   });
 
   it("does not construct a child when the async beforeSpawn fence rejects after a deferred wait", async () => {
-    const gate = createDeferred<void>();
+    const gate = createDeferred();
     const denied = new Error("assignment revoked while approval pending");
     const supervisor = createProcessSupervisor();
     createChildAdapterMock.mockResolvedValue(createStubChildAdapter());

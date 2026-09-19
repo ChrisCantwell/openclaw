@@ -51,7 +51,7 @@ export async function createServiceChildRelayAdapter(
   if (params.abortSignal?.aborted) {
     throw new Error("service child construction aborted");
   }
-  params.assertCurrent?.();
+  await params.assertCurrent?.();
   const admission = params.beforeSpawn?.();
   if (admission) {
     await admission;
@@ -607,7 +607,7 @@ export async function createServiceChildRelayAdapter(
   const ready = (async () => {
     using delivery = preparation.transferSecretInput();
     try {
-      params.assertCurrent?.();
+      await params.assertCurrent?.();
       if (params.abortSignal?.aborted) {
         onConstructionAbort();
       }
@@ -615,12 +615,12 @@ export async function createServiceChildRelayAdapter(
       if (relayAdmission) {
         await relayAdmission;
       }
-      params.assertCurrent?.();
+      await params.assertCurrent?.();
       if (params.abortSignal?.aborted) {
         throw new Error("service child construction aborted");
       }
       await Promise.race([sendChildMessage(start), constructionAbort.promise]);
-      params.assertCurrent?.();
+      await params.assertCurrent?.();
       const [startupResult, secretDeliveryResult] = await Promise.allSettled([
         startup.promise,
         delivery?.deliverTo(child, { abortSignal: params.abortSignal }),
@@ -639,7 +639,7 @@ export async function createServiceChildRelayAdapter(
       if (params.abortSignal?.aborted || waitError) {
         throw waitError ?? new Error("service child construction aborted");
       }
-      params.assertCurrent?.();
+      await params.assertCurrent?.();
       if (params.input !== undefined) {
         stdin?.write(params.input);
         stdin?.end();

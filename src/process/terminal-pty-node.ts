@@ -133,7 +133,7 @@ export async function spawnNodeTerminalPty(
         .then(() => beforeSpawn?.())
         .then(
           () => send({ type: "start", params }),
-          (error) => fail(toErrorObject(error, "PTY launch denied")),
+          (error: unknown) => fail(toErrorObject(error, "PTY launch denied")),
         );
     } else if (message.type === "ready") {
       ptyPid = message.pid;
