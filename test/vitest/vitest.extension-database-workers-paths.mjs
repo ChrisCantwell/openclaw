@@ -6,6 +6,10 @@ export const databaseWorkerExtensionTestRoots = [
 ];
 
 export const databaseWorkerExtensionTestFiles = [
+  "extensions/discord/src/durable-delivery.test.ts",
+  "extensions/discord/src/monitor/monitor.test.ts",
+  "extensions/imessage/src/test-plugin.test.ts",
+  "extensions/mattermost/src/outbound-delivery.test.ts",
   "extensions/feishu/src/dedup.test.ts",
   "extensions/feishu/src/bot.broadcast.test.ts",
   "extensions/feishu/src/feishu-ingress.test.ts",
@@ -96,6 +100,7 @@ export const databaseWorkerExtensionTestFiles = [
   "extensions/codex/src/app-server/run-attempt.continuity-media.test.ts",
   "extensions/codex/src/app-server/run-attempt.durable-context.test.ts",
   "extensions/codex/src/app-server/run-attempt.dynamic-tools.test.ts",
+  "extensions/codex/src/app-server/run-attempt.final-media.test.ts",
   "extensions/codex/src/app-server/run-attempt.generation-finalization.test.ts",
   "extensions/codex/src/app-server/run-attempt.hooks.test.ts",
   "extensions/codex/src/app-server/run-attempt.media-lifetime.test.ts",
@@ -121,6 +126,7 @@ export const databaseWorkerExtensionTestFiles = [
   "extensions/codex/src/app-server/run-attempt.vision-tools.test.ts",
   "extensions/copilot/src/tool-bridge.test.ts",
   "extensions/crabbox/doctor-contract-api.test.ts",
+  "extensions/crabbox/src/doctor.test.ts",
   "extensions/crabbox/index.test.ts",
   "extensions/crabbox/src/crabbox-gateway-methods.test.ts",
   "extensions/crabbox/src/crabbox-worker-node-enrollment.test.ts",
@@ -168,6 +174,7 @@ export const databaseWorkerExtensionTestFiles = [
   "extensions/matrix/src/matrix/client/file-sync-store.sdk.test.ts",
   "extensions/matrix/src/matrix/client/storage.test.ts",
   "extensions/matrix/src/matrix/credentials.test.ts",
+  "extensions/matrix/src/direct-encryption.test.ts",
   "extensions/matrix/src/matrix/sdk.test.ts",
   "extensions/matrix/src/matrix/monitor/startup-verification.test.ts",
   "extensions/matrix/src/matrix/sdk/idb-persistence.test.ts",

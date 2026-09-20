@@ -54,6 +54,21 @@ export const runtimeProcessEntrypoints = {
     sourceWorkerName: "../state/openclaw-state.worker",
     distWorkerPath: "state/openclaw-state.worker.js",
   },
+  agentDatabaseExecution: {
+    currentModuleUrl,
+    sourceWorkerName: "../state/openclaw-agent-execution.worker",
+    distWorkerPath: "state/openclaw-agent-execution.worker.js",
+  },
+  workspaceMemory: {
+    currentModuleUrl,
+    sourceWorkerName: "../worker/memory-worker-entry",
+    distWorkerPath: "worker/memory-worker-entry.js",
+  },
+  workspaceSkills: {
+    currentModuleUrl,
+    sourceWorkerName: "../worker/skills-worker-entry",
+    distWorkerPath: "worker/skills-worker-entry.js",
+  },
   sqliteStore: {
     currentModuleUrl,
     sourceWorkerName: "sqlite-store.worker",

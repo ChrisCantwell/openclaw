@@ -30,6 +30,7 @@ import type { GoalComposerController } from "./chat-composer-goal-mode.ts";
 import { renderChatGoal } from "./chat-composer-goal.ts";
 import type { HumanMentionMenuHost } from "./chat-composer-mention-menu.ts";
 import { renderChatComposerPlusMenu } from "./chat-composer-plus-menu.ts";
+import { renderComposerQuestionDock } from "./chat-composer-question.ts";
 import { renderChatQueue } from "./chat-composer-queue.ts";
 import { renderSelectedHumanMentions } from "./chat-composer-selected-mentions.ts";
 import {
@@ -346,17 +347,7 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
               : html`<div class="agent-chat__composer-run-status">${interruptedStatus}</div>`
           }
         </div>
-        ${
-          questionPanelProps
-            ? html`
-                <div class="agent-chat__question-dock">
-                  <openclaw-chat-question-panel
-                    .props=${questionPanelProps}
-                  ></openclaw-chat-question-panel>
-                </div>
-              `
-            : nothing
-        }
+        ${renderComposerQuestionDock(questionPanelProps)}
         ${props.disabledBanner?.kind === "above-composer" ? disabledBanner : nothing}
         ${progressCard} ${queue} ${goalCard}
       </div>

@@ -48,7 +48,7 @@ export type Inputs = Parameters<typeof rowProjection.readSessionRowInputs>[0];
 export type SnapshotOptions = Pick<
   Inputs,
   "now" | "includeDerivedTitles" | "includeLastMessage" | "excludedChildKeys"
-> & { active?: boolean };
+> & { active?: boolean; subagentRuns?: SessionListRowContext["subagentRuns"] };
 export type Lookup = { agentId: string; key: string; storePath?: string };
 type RowTarget = Pick<Row, "agentId" | "key" | "storeTarget">;
 export const identity = (row: RowTarget) =>
@@ -106,6 +106,19 @@ export function create(target: RowTarget, entry?: SessionEntry): Row {
     generation: Symbol("row"),
   };
 }
+
+export function renewGeneration(row: Row): Row {
+  return {
+    ...row,
+    entry: undefined,
+    storedEntry: undefined,
+    materialized: undefined,
+    lastMessagePreview: undefined,
+    fallbackModel: undefined,
+    generation: Symbol("row"),
+  };
+}
+
 export type EntryRow = Row & Required<Pick<Row, "entry">>;
 export type MaterializedRow = EntryRow & Required<Pick<Row, "materialized">>;
 export function hasEntry(row: Row | undefined): row is EntryRow {
@@ -158,7 +171,7 @@ export function present(
   const active = options.active ?? (live !== undefined || record.entry.status === "running");
   const row = rowProjection.presentSessionRow(record.materialized, {
     now,
-    subagentRuns: context.subagentRuns.atTime(now),
+    subagentRuns: options.subagentRuns ?? context.subagentRuns.atTime(now),
     projectedAgentRuns: context.projectedAgentRuns,
     projectedSubagentActivity: context.projectedSubagentActivity,
     activeModel: active ? (live ?? undefined) : record.fallbackModel,
