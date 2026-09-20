@@ -52,6 +52,76 @@ function host(rootDir: string, standalone = false) {
 }
 
 describe("native plugin generation interop", () => {
+  it.each(["", "@fixture/"])(
+    "preserves %ssibling dependency assets across nested installs and generations",
+    async (scope) => {
+      const readerName = `${scope}asset-reader`;
+      const platformName = `${scope}platform`;
+      const installs = [
+        ["", "1.0.0"],
+        ["nested/", "2.0.0"],
+      ] as const;
+      const files: Record<string, string> = {
+        "entry.cjs": `const root = require(${JSON.stringify(readerName)});
+          const nested = require('./nested/entry.cjs');
+          exports.read = () => [root.read(), nested.read()];`,
+        "nested/entry.cjs": `module.exports = require(${JSON.stringify(readerName)});`,
+      };
+      for (const [prefix, version] of installs) {
+        files[`${prefix}package.json`] = JSON.stringify({
+          dependencies: { [readerName]: version },
+        });
+        files[`${prefix}node_modules/${readerName}/package.json`] = JSON.stringify({
+          name: readerName,
+          version,
+          main: "index.cjs",
+          optionalDependencies: { [platformName]: version },
+        });
+        files[`${prefix}node_modules/${readerName}/index.cjs`] = `
+          const fs = require('node:fs');
+          const path = require('node:path');
+          exports.read = () => fs.readFileSync(path.join(__dirname, '../platform/vec0.so'), 'utf8');`;
+        files[`${prefix}node_modules/${platformName}/package.json`] = JSON.stringify({
+          name: platformName,
+          version,
+        });
+        files[`${prefix}node_modules/${platformName}/vec0.so`] = `before-${version}`;
+      }
+      const root = fixture(files);
+      type Plugin = { read(): string[] };
+      const entry = path.join(root, "entry.cjs");
+      const before = ["before-1.0.0", "before-2.0.0"];
+      expect((createRequire(entry)(entry) as Plugin).read()).toEqual(before);
+      const firstHost = host(root);
+      const first = firstHost.load("entry.cjs") as Plugin;
+      expect(first.read()).toEqual(before);
+      for (const [prefix, version] of installs) {
+        fs.writeFileSync(
+          path.join(root, `${prefix}node_modules/${platformName}/vec0.so`),
+          `after-${version}`,
+        );
+      }
+      const second = host(root).load("entry.cjs") as Plugin;
+      const after = ["after-1.0.0", "after-2.0.0"];
+      expect(second.read()).toEqual(after);
+      fs.rmSync(root, { recursive: true, force: true });
+      expect(first.read()).toEqual(before);
+      expect(second.read()).toEqual(after);
+      await firstHost.dispose();
+      expect(second.read()).toEqual(after);
+    },
+  );
+
+  it("resolves an ancestor dependency alias matching a noninstalled plugin directory", () => {
+    const root = fixture({
+      "shared/package.json": '{"dependencies":{"shared":"npm:actual-shared@1.0.0"}}',
+      "shared/entry.cjs": "module.exports = require('shared');",
+      "node_modules/shared/package.json": '{"name":"actual-shared","main":"index.cjs"}',
+      "node_modules/shared/index.cjs": "exports.value = 42;",
+    });
+    expect(host(path.join(root, "shared")).load("entry.cjs")).toMatchObject({ value: 42 });
+  });
+
   it.each([true, false])(
     "preserves native-addon package-root detection (declared loader: %s)",
     (declared) => {

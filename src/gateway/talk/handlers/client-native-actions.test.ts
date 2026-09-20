@@ -28,7 +28,7 @@ import { readTranscriptEventRows } from "../../../config/sessions/session-access
 import { onInternalSessionTranscriptUpdate } from "../../../sessions/transcript-events.js";
 import { createDeferredCore } from "../../../shared/deferred.js";
 import {
-  closeOpenClawAgentDatabaseByPath,
+  closeOpenClawAgentDatabaseByPathAsync,
   openOpenClawAgentDatabase,
   resolveOpenClawAgentSqlitePath,
 } from "../../../state/openclaw-agent-db.js";
@@ -321,7 +321,9 @@ describe("native Talk action ownership through public plugin registration", () =
         await fixture.invoke("talk.client.close", { voiceSessionId: result.voiceSessionId });
         const rawCompleted = rawTranscriptRows();
         expect(
-          closeOpenClawAgentDatabaseByPath(resolveOpenClawAgentSqlitePath({ agentId: AGENT_ID })),
+          await closeOpenClawAgentDatabaseByPathAsync(
+            resolveOpenClawAgentSqlitePath({ agentId: AGENT_ID }),
+          ),
         ).toBe(true);
         await connectNativeSession(fixture);
         const session = await nativeCallSession();
