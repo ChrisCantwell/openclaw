@@ -22,7 +22,6 @@ import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-
 import { logInfo } from "../logger.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import { isSecretEgressProxyActive } from "../secrets/egress-proxy/registry.js";
-import type { SecretStoreExecEnvironment } from "../secrets/store/secret-store.js";
 import { createDeferredCore } from "../shared/deferred.js";
 import { normalizeDeliveryContext } from "../utils/delivery-context.shared.js";
 import { captureAgentToolSourceExecutionGuard } from "./agent-tool-source-execution-guard.js";
@@ -40,6 +39,10 @@ import {
   resolvePreparedExecEnvironment,
 } from "./bash-tools.exec-request-preparation.js";
 import {
+  BACKGROUND_EXEC_FOLLOW_UP,
+  resolveExecBackgroundDefaults,
+} from "./bash-tools.exec-run-defaults.js";
+import {
   DEFAULT_MAX_OUTPUT,
   DEFAULT_PENDING_MAX_OUTPUT,
   ExecProcessPreflightError,
@@ -56,6 +59,7 @@ import {
   validateScriptFileForShellBleed,
 } from "./bash-tools.exec-script-preflight.js";
 import { authorizeSecretEnvForExec } from "./bash-tools.exec-secret-authorize.js";
+import { createExecStoreEnvReader } from "./bash-tools.exec-store-env.js";
 import {
   attachExecApprovalReview,
   buildExecForegroundResult,
@@ -71,7 +75,7 @@ import type {
   ExecToolDetails,
 } from "./bash-tools.exec-types.js";
 import { formatUnavailableWorkdirFailure, resolveExecWorkdir } from "./bash-tools.exec-workdir.js";
-import { clampWithDefault, readEnvInt, truncateMiddle } from "./bash-tools.shared.js";
+import { clampWithDefault, truncateMiddle } from "./bash-tools.shared.js";
 import {
   createExecToolExecutionTimeoutResolver,
   resolveExecDefaultTimeoutSec,
@@ -82,9 +86,6 @@ import type { AgentToolWithMeta } from "./tools/common.js";
 import { withoutGatewayToolCallerIdentity } from "./tools/gateway-caller-context.js";
 
 type GatewayApprovalResult = Awaited<ReturnType<typeof processGatewayAllowlist>>;
-
-const BACKGROUND_EXEC_FOLLOW_UP =
-  "Use process (list/poll/log/write/send-keys/submit/paste/kill/clear/remove) for follow-up.";
 
 /** Creates an exec tool instance with runtime defaults and approval policy wiring. */
 export function createExecTool(
@@ -97,24 +98,11 @@ export function createExecTool(
     resolveStoredSubagentCapabilities(defaults?.runSessionKey ?? defaults?.sessionKey, {
       cfg: defaults?.config,
     }).depth > 0;
-  // Agent runs own one tool instance, so the store is read on first exec and reused for that run.
-  // A new run constructs a new instance and observes later store mutations.
-  let storeEnvPromise: Promise<SecretStoreExecEnvironment>;
-  const resolveStoreEnv = () =>
-    (storeEnvPromise ??= import("../secrets/store/secret-store.js").then((store) =>
-      store.readSecretStoreExecEnvironment({
-        includeSecretSentinels: secretEgressEnabled,
-        excludeNames: preparedRunEnvironment.excludedStoreNames,
-      }),
-    ));
-  const defaultBackgroundMs = clampWithDefault(
-    defaults?.backgroundMs ?? readEnvInt("OPENCLAW_BASH_YIELD_MS", "PI_BASH_YIELD_MS"),
-    10_000,
-    10,
-    120_000,
-  );
-  const allowBackground =
-    defaults?.processToolAvailabilityRef?.value ?? defaults?.allowBackground ?? true;
+  const resolveStoreEnv = createExecStoreEnvReader({
+    includeSecretSentinels: secretEgressEnabled,
+    excludeNames: preparedRunEnvironment.excludedStoreNames,
+  });
+  const { defaultBackgroundMs, allowBackground } = resolveExecBackgroundDefaults(defaults);
   const defaultTimeoutSec = resolveExecDefaultTimeoutSec(defaults?.timeoutSec);
   const defaultPathPrepend = normalizePathPrepend(defaults?.pathPrepend);
   const {

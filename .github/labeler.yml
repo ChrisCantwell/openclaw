@@ -150,6 +150,10 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/visitor-access/**"
+"plugin: secret-assignment-broker":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/secret-assignment-broker/**"
 "channel: imessage":
   - changed-files:
       - any-glob-to-any-file:

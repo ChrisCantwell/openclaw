@@ -91,7 +91,7 @@ function createChildFixture(options: { startupError?: string; finalizationError?
   const supervisor: ProcessSupervisor = {
     acquireScopeCleanup: () => cleanupScope,
     spawn: async (params) => {
-      params.assertCurrent?.();
+      void params.assertCurrent?.();
       input = params;
       inputs.push(params);
       return run;

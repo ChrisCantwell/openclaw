@@ -565,6 +565,9 @@ const config = {
     // Mirror config parsing, redaction mapping, cap fitting, and the runner are
     // asserted by the focused Beam mirror tests; production wires only the service.
     "extensions/beam/src/mirror.ts": ["exports", "types"],
+    // Hermetic in-memory assignment store consumed by the broker's focused tests;
+    // production uses the host keyed store through createKeyedAssignmentStore.
+    "extensions/secret-assignment-broker/src/store.ts": ["exports"],
     "src/infra/heartbeat-wake.ts": ["exports"],
   },
   workspaces: {

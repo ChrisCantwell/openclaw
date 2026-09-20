@@ -17,10 +17,12 @@ export type AgentAssignment = {
   names: readonly string[];
 };
 
+const NO_NAMES: readonly string[] = Object.freeze([]);
+
 /** Absent record: authorize nothing. Empty selected never implies global. */
 export const EMPTY_ASSIGNMENT: AgentAssignment = Object.freeze({
   mode: "none",
-  names: Object.freeze([]) as unknown as readonly string[],
+  names: NO_NAMES,
 });
 
 export type CandidateEntry = { name: string; kind: "secret" | "env" };

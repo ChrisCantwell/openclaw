@@ -60,14 +60,16 @@ import type {
   PluginHookBeforeMessageWriteResult,
   PluginHookResolveExecEnvContext,
   PluginHookResolveExecEnvEvent,
-  PluginHookSecretEnvAuthorizeContext,
-  PluginHookSecretEnvAuthorizeEvent,
-  PluginHookSecretEnvAuthorizeResult,
   PluginHookSkillContext,
   PluginHookSkillProposalEvaluateEvent,
   PluginHookSkillProposalEvaluateResult,
   PluginHookSkillProposalEvaluationOutcome,
 } from "./hook-types.js";
+import { createSecretEnvAuthorizeRunner } from "./hooks.secret-env-authorize.js";
+import {
+  DEFAULT_MODIFYING_HOOK_TIMEOUT_MS_BY_HOOK,
+  DEFAULT_VOID_HOOK_TIMEOUT_MS_BY_HOOK,
+} from "./hooks.timeouts.js";
 import { runPluginCleanup } from "./plugin-instance-scope.js";
 import {
   type PluginSubagentRequesterContext,
@@ -116,47 +118,6 @@ type HookRunnerOptions = {
    * but the plugin's underlying work is not cancelled.
    */
   modifyingHookTimeoutMsByHook?: Partial<Record<PluginHookName, number>>;
-};
-
-const DEFAULT_VOID_HOOK_TIMEOUT_MS_BY_HOOK: Partial<Record<PluginHookName, number>> = {
-  agent_end: 30_000,
-  channel_pairing_requested: 2_000,
-  // Defensive default for the compaction lifecycle hooks. Without a budget an
-  // unresponsive handler runs fully unbounded, and in the codex agent harness
-  // these hooks fire on the serialized notification queue
-  // (event-projector handleItemStarted awaits before_compaction / after_compaction
-  // for a contextCompaction item), so a hung handler freezes every later codex
-  // notification — including turn/completed — and the whole turn hangs. These
-  // hooks can legitimately do real work (e.g. a memory flush), so the budget
-  // matches agent_end's 30s rather than the tighter modifying-hook defaults.
-  // The runner is fail-open for void hooks, so a timed-out handler is logged
-  // and compaction proceeds.
-  before_compaction: 30_000,
-  after_compaction: 30_000,
-  skill_changed: 30_000,
-  skill_proposal_changed: 30_000,
-  // Shutdown hooks share the Gateway's five-second teardown budget. They fail
-  // open after logging so one plugin cannot consume the process watchdog.
-  gateway_stop: 5_000,
-};
-const DEFAULT_MODIFYING_HOOK_TIMEOUT_MS_BY_HOOK: Partial<Record<PluginHookName, number>> = {
-  before_agent_run: 15_000,
-  // Policy hooks fail closed in the global runner. A bounded timeout turns a
-  // stalled policy process into a denial instead of freezing the operation.
-  before_install: 15_000,
-  before_tool_call: 15_000,
-  // Terminal finalization hooks sit on the runner's completion path. A hung
-  // handler must not freeze final delivery or keep compaction retry recovery
-  // unresolved; timeout fail-opens with the original final answer.
-  before_agent_finalize: 15_000,
-  before_prompt_build: 15_000,
-  // Outbound modifying hooks run inside the serialized reply delivery lane.
-  // A hung plugin must fail open so later hooks and queued replies can settle.
-  message_sending: 15_000,
-  reply_payload_sending: 15_000,
-  resolve_exec_env: 15_000,
-  secret_env_authorize: 15_000,
-  skill_proposal_evaluate: 120_000,
 };
 
 function deepFreezeHookValue<T>(value: T, seen = new WeakSet<object>()): T {
@@ -285,30 +246,6 @@ function getHooksForNameAndPlugin<K extends PluginHookName>(
   pluginId: string,
 ): PluginHookRegistration<K>[] {
   return getHooksForName(registry, hookName).filter((hook) => hook.pluginId === pluginId);
-}
-
-/**
- * Validates one secret_env_authorize handler's decision.
- *
- * Returns the authorized-name set when the handler decided, or `undefined` when
- * it returned nothing or a malformed value. A registered handler that does not
- * decide must deny the whole projection, so the runner treats `undefined` as a
- * terminal no-decision rather than skipping the handler.
- */
-function readSecretEnvAuthorizeDecision(
-  value: PluginHookSecretEnvAuthorizeResult | void | null,
-): Set<string> | undefined {
-  if (!value || typeof value !== "object" || !Array.isArray(value.allowedNames)) {
-    return undefined;
-  }
-  const names = new Set<string>();
-  for (const name of value.allowedNames) {
-    if (typeof name !== "string") {
-      return undefined;
-    }
-    names.add(name);
-  }
-  return names;
 }
 
 /**
@@ -1497,64 +1434,14 @@ export function createHookRunner(
     );
     return result ?? {};
   }
-
-  /**
-   * Runs the secret_env_authorize policy hook with per-handler decision
-   * validation.
-   *
-   * Unlike the generic modifying runner, which silently skips non-deciding
-   * handlers, every registered secret_env_authorize handler MUST decide. A
-   * handler that returns nothing, returns a malformed value, throws, or times
-   * out yields no decision for the whole dispatch so the caller fails closed
-   * instead of merging a partial allow. Only when every handler decides do we
-   * return the intersection, which can only ever narrow the resolved projection.
-   */
-  async function runSecretEnvAuthorize(
-    event: PluginHookSecretEnvAuthorizeEvent,
-    ctx: PluginHookSecretEnvAuthorizeContext,
-  ): Promise<PluginHookSecretEnvAuthorizeResult | undefined> {
-    const hooks = getHooksForName(registry, "secret_env_authorize", ctx);
-    if (hooks.length === 0) {
-      // No registered handler: core projects the resolved snapshot unchanged.
-      return undefined;
-    }
-    logger?.debug?.(
-      `[hooks] running secret_env_authorize (${hooks.length} handlers, fail-closed per handler)`,
-    );
-
-    let allowed: Set<string> | undefined;
-    for (const hook of hooks) {
-      let handlerResult: PluginHookSecretEnvAuthorizeResult | void;
-      try {
-        const handler = hook.handler as (
-          event: PluginHookSecretEnvAuthorizeEvent,
-          ctx: PluginHookSecretEnvAuthorizeContext,
-        ) => Promise<PluginHookSecretEnvAuthorizeResult | void>;
-        const promise = Promise.resolve(handler(event, ctx));
-        const timeoutMs = getModifyingHookTimeoutMs(hook.hookName, hook);
-        handlerResult = timeoutMs ? await withHookTimeout(promise, timeoutMs) : await promise;
-      } catch (err) {
-        // Fail closed: a throwing or timed-out policy yields no decision.
-        handleHookError({ hookName: "secret_env_authorize", pluginId: hook.pluginId, error: err });
-        return undefined;
-      }
-      const decision = readSecretEnvAuthorizeDecision(handlerResult);
-      if (!decision) {
-        // A registered handler that does not decide denies the whole projection;
-        // no later handler may re-widen it.
-        logger?.warn(
-          `[hooks] secret_env_authorize handler from ${hook.pluginId} returned no valid decision; denying projection`,
-        );
-        return undefined;
-      }
-      allowed = allowed ? new Set([...allowed].filter((name) => decision.has(name))) : decision;
-      if (allowed.size === 0) {
-        // The intersection can only shrink; an empty set is already terminal.
-        return { allowedNames: [] };
-      }
-    }
-    return { allowedNames: [...(allowed ?? [])] };
-  }
+  const runSecretEnvAuthorize = createSecretEnvAuthorizeRunner({
+    registry,
+    logger,
+    getHooksForName,
+    getModifyingHookTimeoutMs,
+    withHookTimeout,
+    handleHookError,
+  });
 
   // =========================================================================
   // Utility

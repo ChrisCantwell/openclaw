@@ -48,6 +48,16 @@ import type {
   PluginHookSkillProposalEvaluateEvent,
   PluginHookSkillProposalEvaluateResult,
 } from "./hook-skill.types.js";
+import type {
+  PluginHookBeforeInstallContext,
+  PluginHookBeforeInstallEvent,
+  PluginHookBeforeInstallResult,
+} from "./hook-types.before-install.js";
+import type {
+  PluginHookSecretEnvAuthorizeContext,
+  PluginHookSecretEnvAuthorizeEvent,
+  PluginHookSecretEnvAuthorizeResult,
+} from "./hook-types.secret-env.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
 import type {
   PluginAgentTurnPrepareEvent,
@@ -927,95 +937,6 @@ type PluginHookSubagentEndedEvent = {
   error?: string;
 };
 
-export type PluginInstallTargetType = "skill" | "plugin";
-type PluginInstallRequestKind =
-  | "skill-install"
-  | "plugin-dir"
-  | "plugin-archive"
-  | "plugin-file"
-  | "plugin-npm"
-  | "plugin-git";
-export type PluginInstallSourcePathKind = "file" | "directory";
-
-type PluginInstallFinding = {
-  ruleId: string;
-  severity: "info" | "warn" | "critical";
-  file: string;
-  line: number;
-  message: string;
-};
-
-export type PluginHookBeforeInstallRequest = {
-  kind: PluginInstallRequestKind;
-  mode: "install" | "update";
-  requestedSpecifier?: string;
-};
-
-export type PluginHookBeforeInstallBuiltinScan = {
-  status: "ok" | "error";
-  scannedFiles: number;
-  critical: number;
-  warn: number;
-  info: number;
-  findings: PluginInstallFinding[];
-  error?: string;
-};
-
-type PluginHookBeforeInstallSkillInstallSpec = {
-  id?: string;
-  kind: "brew" | "node" | "go" | "uv" | "download";
-  label?: string;
-  bins?: string[];
-  os?: string[];
-  formula?: string;
-  package?: string;
-  module?: string;
-  url?: string;
-  sha256?: string;
-  archive?: string;
-  extract?: boolean;
-  stripComponents?: number;
-  targetDir?: string;
-};
-
-export type PluginHookBeforeInstallSkill = {
-  installId: string;
-  installSpec?: PluginHookBeforeInstallSkillInstallSpec;
-};
-
-export type PluginHookBeforeInstallPlugin = {
-  pluginId: string;
-  contentType: "bundle" | "package" | "file";
-  packageName?: string;
-  manifestId?: string;
-  version?: string;
-  extensions?: string[];
-};
-
-export type PluginHookBeforeInstallContext = {
-  targetType: PluginInstallTargetType;
-  requestKind: PluginInstallRequestKind;
-  origin?: string;
-};
-
-export type PluginHookBeforeInstallEvent = {
-  targetType: PluginInstallTargetType;
-  targetName: string;
-  sourcePath: string;
-  sourcePathKind: PluginInstallSourcePathKind;
-  origin?: string;
-  request: PluginHookBeforeInstallRequest;
-  builtinScan: PluginHookBeforeInstallBuiltinScan;
-  skill?: PluginHookBeforeInstallSkill;
-  plugin?: PluginHookBeforeInstallPlugin;
-};
-
-type PluginHookBeforeInstallResult = {
-  findings?: PluginInstallFinding[];
-  block?: boolean;
-  blockReason?: string;
-};
-
 // ---------------------------------------------------------------------------
 // before_agent_run — Lifecycle Gate Hook
 // ---------------------------------------------------------------------------
@@ -1048,29 +969,21 @@ export type PluginHookResolveExecEnvEvent = {
 };
 
 export type PluginHookResolveExecEnvContext = PluginHookAgentContext;
-
-/** One resolved store entry in the projection, identified by name and kind only. */
-export type PluginHookSecretEnvCandidate = { name: string; kind: "secret" | "env" };
-
-export type PluginHookSecretEnvAuthorizeEvent = {
-  toolName: "exec";
-  host: "gateway" | "sandbox" | "node";
-  sessionKey?: string;
-  /** Resolved store-entry names for this run; never carries values. */
-  candidates: readonly PluginHookSecretEnvCandidate[];
-};
-
-export type PluginHookSecretEnvAuthorizeContext = PluginHookAgentContext;
-
-/**
- * Result for secret_env_authorize. `allowedNames` narrows the projection to the
- * intersection of every handler's set, and handlers can only ever restrict the
- * projection, never widen it. Every participating handler MUST return a valid
- * decision: a handler that returns nothing (or a malformed value), throws, or
- * times out denies the whole projection, so one non-deciding policy can never be
- * masked by another handler's allow.
- */
-export type PluginHookSecretEnvAuthorizeResult = { allowedNames: readonly string[] };
+export type {
+  PluginHookBeforeInstallBuiltinScan,
+  PluginHookBeforeInstallContext,
+  PluginHookBeforeInstallEvent,
+  PluginHookBeforeInstallPlugin,
+  PluginHookBeforeInstallRequest,
+  PluginHookBeforeInstallSkill,
+  PluginInstallSourcePathKind,
+  PluginInstallTargetType,
+} from "./hook-types.before-install.js";
+export type {
+  PluginHookSecretEnvAuthorizeContext,
+  PluginHookSecretEnvAuthorizeEvent,
+  PluginHookSecretEnvAuthorizeResult,
+} from "./hook-types.secret-env.js";
 
 export type PluginHookHandlerMap = {
   agent_turn_prepare: (

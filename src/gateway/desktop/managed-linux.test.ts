@@ -61,7 +61,7 @@ function createFakeSupervisor() {
       };
     },
     async spawn(input) {
-      input.assertCurrent?.();
+      void input.assertCurrent?.();
       inputs.push(input);
       const { promise: wait, resolve: settle } = createDeferred<RunExit>();
       const record = {

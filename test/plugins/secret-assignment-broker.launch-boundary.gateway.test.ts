@@ -158,8 +158,7 @@ describe.skipIf(process.platform === "win32")("secret-assignment broker launch b
       yieldMs: 120_000,
     });
 
-    expect(result.details.status).toBe("completed");
-    expect(result.details.aggregated).toBe("[synthetic-a][]");
+    expect(result.details).toMatchObject({ status: "completed", aggregated: "[synthetic-a][]" });
   });
 
   it("withholds every store entry from an unassigned agent's real child process", async () => {
@@ -170,8 +169,7 @@ describe.skipIf(process.platform === "win32")("secret-assignment broker launch b
       yieldMs: 120_000,
     });
 
-    expect(result.details.status).toBe("completed");
-    expect(result.details.aggregated).toBe("[][]");
+    expect(result.details).toMatchObject({ status: "completed", aggregated: "[][]" });
   });
 
   it("withholds a revoked entry from the next real launch", async () => {
@@ -182,8 +180,7 @@ describe.skipIf(process.platform === "win32")("secret-assignment broker launch b
       command: 'printf "[%s]" "$DEPLOY_ENV_A"',
       yieldMs: 120_000,
     });
-    expect(before.details.status).toBe("completed");
-    expect(before.details.aggregated).toBe("[synthetic-a]");
+    expect(before.details).toMatchObject({ status: "completed", aggregated: "[synthetic-a]" });
 
     // Revoke, then run a fresh tool instance; the next real child must not see
     // the revoked entry.
@@ -193,7 +190,6 @@ describe.skipIf(process.platform === "win32")("secret-assignment broker launch b
       yieldMs: 120_000,
     });
 
-    expect(after.details.status).toBe("completed");
-    expect(after.details.aggregated).toBe("[]");
+    expect(after.details).toMatchObject({ status: "completed", aggregated: "[]" });
   });
 });

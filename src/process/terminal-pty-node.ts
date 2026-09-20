@@ -53,7 +53,6 @@ export async function spawnNodeTerminalPty(
       return;
     }
     startupError ??= error;
-    ready.reject(error);
     if (child.connected) {
       child.disconnect();
     }

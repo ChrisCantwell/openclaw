@@ -9,7 +9,7 @@ import { parseExecApprovalResultText } from "./exec-approval-result.js";
 import type { AgentToolResult } from "./runtime/index.js";
 import { DEFAULT_MAX_LIVE_TOOL_RESULT_CHARS } from "./tool-result-limits.js";
 
-/** Generic, identity-free text for an assignment-policy denial. Never names an entry. */
+/** @public Generic, identity-free text for an assignment-policy denial. Never names an entry. */
 export const SECRET_PROJECTION_DENIED_TEXT =
   "Exec denied: an agent secret-assignment policy denied one or more store entries for this run.";
 

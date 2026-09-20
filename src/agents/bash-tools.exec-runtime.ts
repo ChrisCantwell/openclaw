@@ -905,13 +905,7 @@ export async function runExecProcess({
           ...input,
           ...(grant ? { env: { ...input.env, ...grant.env }, onCancel: grant.revoke } : {}),
           assertCurrent,
-          beforeSpawn: async () => {
-            const denied = await beforeSpawn?.();
-            if (denied) {
-              throw new ExecProcessPreflightError(denied);
-            }
-            assertHostPolicyCurrent?.();
-          },
+          beforeSpawn: assertHostPolicyCurrent,
         }),
       );
     } catch (error) {

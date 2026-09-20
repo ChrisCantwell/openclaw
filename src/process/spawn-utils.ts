@@ -60,7 +60,10 @@ export async function spawnWithFallback(
   let lastError: unknown;
   for (const [index, attempt] of attempts.entries()) {
     // Caller revocation is not a spawn failure and cannot select a fallback.
-    await params.assertCurrent?.();
+    const current = params.assertCurrent?.();
+    if (current) {
+      await current;
+    }
     try {
       const child = await spawnAndWaitForSpawn(spawnImpl, params.argv, attempt);
       return {

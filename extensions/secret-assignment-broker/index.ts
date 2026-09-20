@@ -16,28 +16,16 @@ import {
   type GatewayRequestHandlerOptions,
 } from "openclaw/plugin-sdk/gateway-runtime";
 import { definePluginEntry, type OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import { normalizeOptionalString } from "openclaw/plugin-sdk/string-coerce-runtime";
 import {
   allowedNamesForCandidate,
   applyAssignmentEdit,
+  EMPTY_ASSIGNMENT,
   type AgentAssignmentMode,
 } from "./src/assignments.js";
-import {
-  createKeyedAssignmentStore,
-  type AssignmentStore,
-  type KeyedStoreLike,
-} from "./src/store.js";
+import { createKeyedAssignmentStore, type AssignmentStore } from "./src/store.js";
 
 const NAMESPACE = "agent-assignments";
-
-type RuntimeWithKeyedStore = {
-  state: { openKeyedStore: (options: { namespace: string; maxEntries: number }) => unknown };
-};
-
-/** Reads a required string param, rejecting blank values. */
-function readString(params: unknown, key: string): string | undefined {
-  const value = (params as Record<string, unknown> | undefined)?.[key];
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
 
 /** Resolves the authenticated agent id from the connection, never from params. */
 function authenticatedAgentId(options: GatewayRequestHandlerOptions): string | undefined {
@@ -59,10 +47,10 @@ async function handle(
 
 /** Builds the assignment store backed by the host keyed store. */
 function createStore(api: OpenClawPluginApi): AssignmentStore {
-  const keyed = (api.runtime as unknown as RuntimeWithKeyedStore).state.openKeyedStore({
+  const keyed = api.runtime.state.openKeyedStore<unknown>({
     namespace: NAMESPACE,
     maxEntries: 10_000,
-  }) as KeyedStoreLike;
+  });
   return createKeyedAssignmentStore(keyed);
 }
 
@@ -95,7 +83,7 @@ export default definePluginEntry({
         handle(options, async () => {
           const agentId = authenticatedAgentId(options);
           if (!agentId) {
-            return { agentId: null, assignment: { mode: "none", names: [] } };
+            return { agentId: null, assignment: EMPTY_ASSIGNMENT };
           }
           return { agentId, assignment: await getStore().get(agentId) };
         }),
@@ -114,12 +102,13 @@ export default definePluginEntry({
       "secrets.assignments.broker.set",
       (options: GatewayRequestHandlerOptions) =>
         handle(options, async () => {
-          const agentId = readString(options.params, "agentId");
-          const mode = readString(options.params, "mode") as AgentAssignmentMode | undefined;
-          if (!agentId || (mode !== "all" && mode !== "selected" && mode !== "none")) {
+          const agentId = normalizeOptionalString(options.params.agentId);
+          const rawMode = normalizeOptionalString(options.params.mode);
+          if (!agentId || (rawMode !== "all" && rawMode !== "selected" && rawMode !== "none")) {
             throw new Error("agentId and mode (none|selected|all) are required");
           }
-          const rawNames = (options.params as { names?: unknown }).names;
+          const mode: AgentAssignmentMode = rawMode;
+          const rawNames = options.params.names;
           const names = Array.isArray(rawNames)
             ? rawNames.filter((name): name is string => typeof name === "string")
             : [];

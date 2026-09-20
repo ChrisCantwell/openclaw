@@ -14,13 +14,12 @@ import { createServiceChildCleanupDeadline } from "./service-child-cleanup-deadl
 import { readServiceChildControl } from "./service-child-control-reader.js";
 import { isOwnedProcessGroupGone } from "./service-child-group-ownership.js";
 import { createOutputRelay } from "./service-child-output-relay.js";
-import {
-  encodeServiceChildMessage,
-  type ServiceChildAnchorMessage,
-  type ServiceChildControlMessage,
-  type ServiceChildRelayMessage,
-  type ServiceChildStart,
+import type {
+  ServiceChildAnchorMessage,
+  ServiceChildRelayMessage,
+  ServiceChildStart,
 } from "./service-child-protocol.js";
+import { createServiceChildMessaging } from "./service-child-relay-messaging.js";
 import {
   prepareServiceChildRelay,
   type ServiceChildRelayParams,
@@ -238,41 +237,11 @@ export async function createServiceChildRelayAdapter(
     force: () => kill("SIGKILL"),
   });
 
-  const sendChildMessage = (
-    message: ServiceChildStart | ServiceChildControlMessage,
-  ): Promise<void> =>
-    new Promise((resolve, reject) => {
-      if (!child.connected) {
-        reject(new Error("service child lifecycle IPC is closed"));
-        return;
-      }
-      child.send(message, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
-
-  const sendControlMessage = (message: ServiceChildControlMessage): Promise<void> => {
-    if (useWindowsJobAnchor) {
-      return sendChildMessage(message);
-    }
-    return new Promise((resolve, reject) => {
-      if (!control || control.destroyed) {
-        reject(new Error("service child control pipe is closed"));
-        return;
-      }
-      control.write(encodeServiceChildMessage(message), "utf8", (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
-  };
+  const { sendChildMessage, sendControlMessage } = createServiceChildMessaging({
+    child,
+    control,
+    useWindowsJobAnchor,
+  });
 
   const retirement = createServiceChildRelayRetirement({
     child,

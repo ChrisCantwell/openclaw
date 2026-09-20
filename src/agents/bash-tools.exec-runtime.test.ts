@@ -218,7 +218,7 @@ describe("sandbox exec preparation failures", () => {
       supervisorMock.spawn.mockImplementation(async (input: SpawnInput) => {
         await Promise.resolve();
         current = false;
-        input.assertCurrent?.();
+        void input.assertCurrent?.();
         childEffect();
         return runtimeManagedRun(input);
       });
@@ -313,7 +313,7 @@ describe("sandbox exec preparation failures", () => {
         if (loseAt === -1) {
           currentClaim = undefined;
         }
-        input.assertCurrent?.();
+        void input.assertCurrent?.();
         if (input.mode === "pty") {
           throw new Error("PTY unavailable");
         }
