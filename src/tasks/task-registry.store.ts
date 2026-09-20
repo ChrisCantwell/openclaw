@@ -1,7 +1,6 @@
 import { createSqliteLifecycleAggregateError } from "../infra/sqlite-coordinator.js";
 import type { SqliteWorkerNativeSettlementOwner } from "../infra/sqlite-worker-operation-settlement.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
 import type { OpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.types.js";
 import type { TaskInitialWorkerOperations } from "./task-initial-worker.types.js";
 import type {
@@ -71,7 +70,11 @@ export type TaskRegistryStore = TaskExecutionRestoreStore & {
   loadMutationSnapshot?: (
     scopes: readonly TaskRegistryMutationScope[],
   ) => TaskRegistryStoreSnapshot;
-  listTasksForOwnerKey?: (ownerKey: string) => Promise<TaskRecord[]>;
+  listTasksForOwnerKey?: (
+    context: OpenClawStateWorkerContext,
+    ownerKey: string,
+    assertCurrent: () => void,
+  ) => Promise<TaskRecord[]>;
   deleteTaskWithDeliveryState: (taskId: string) => void;
   upsertDeliveryState: (state: TaskDeliveryState) => void;
   close?: () => void;
@@ -125,10 +128,15 @@ const defaultTaskRegistryStore: TaskRegistryStore = {
   },
   loadMutationSnapshot: loadTaskRegistryMutationStateFromSqlite,
   withMutation: withTaskRegistrySqliteMutation,
-  async listTasksForOwnerKey(ownerKey) {
-    const context = captureOpenClawStateWorkerContext();
+  async listTasksForOwnerKey(context, ownerKey, assertCurrent) {
     const { executeOpenClawStateWorker } = await import("../state/openclaw-state-worker-store.js");
-    return executeOpenClawStateWorker(context, { type: "tasks.ownerRecords", input: { ownerKey } });
+    assertCurrent();
+    const records = await executeOpenClawStateWorker(context, {
+      type: "tasks.ownerRecords",
+      input: { ownerKey },
+    });
+    assertCurrent();
+    return records;
   },
   upsertTaskWithDeliveryState: upsertTaskWithDeliveryStateToSqlite,
   deleteTaskWithDeliveryState: deleteTaskAndDeliveryStateFromSqlite,

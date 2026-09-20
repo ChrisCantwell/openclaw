@@ -46,7 +46,7 @@ import {
   onTaskRegistryChange,
 } from "./task-registry.store.js";
 import { loadTaskRegistryStateFromSqliteReadOnly } from "./task-registry.store.sqlite.js";
-import { createTaskFixture } from "./task-registry.test-support.js";
+import { createTaskFixture, prepareTaskFixtureRead } from "./task-registry.test-support.js";
 import { configureTaskFlowRegistryRuntime } from "./task-runtime.test-helpers.js";
 
 vi.mock("node:timers/promises", { spy: true });
@@ -447,7 +447,7 @@ describe("task registry read preparation", () => {
       }
       const committed = createDeferred();
       const release = createDeferred();
-      const store = getTaskRegistryStore();
+      const store = await prepareTaskFixtureRead(selected);
       const snapshot = store.loadMutationSnapshotAsync.bind(store);
       let held = false;
       vi.spyOn(store, "loadMutationSnapshotAsync").mockImplementation(async (...args) => {
@@ -712,7 +712,7 @@ describe("task registry read preparation", () => {
           notifyPolicy: "silent",
           detail: createSubagentTaskBackingDetail(entry.generation!),
         });
-        const store = getTaskRegistryStore();
+        const store = await prepareTaskFixtureRead(task);
         const mutate = store.runAgentEventMutationAsync.bind(store);
         const snapshot = store.loadMutationSnapshotAsync.bind(store);
         const committed = createDeferred<Awaited<ReturnType<typeof mutate>>>();

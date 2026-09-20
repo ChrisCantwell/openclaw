@@ -4,9 +4,14 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
+import { setTimeout as delay } from "node:timers/promises";
 import { AgentSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 
 const directory = process.argv[2];
+const modelControls = process.argv.slice(3).includes("--model-controls");
+const holdModeControl = process.argv.slice(3).includes("--hold-mode-control");
+const holdNewSession = process.argv.slice(3).includes("--hold-new-session");
+const holdPromptReply = process.argv.slice(3).includes("--hold-prompt-reply");
 const sessions = new Map();
 const configOptions = (state) => [
   {
@@ -19,6 +24,21 @@ const configOptions = (state) => [
       { value: "brief", name: "Brief" },
     ],
   },
+  ...(modelControls
+    ? [
+        {
+          id: "model",
+          name: "Model",
+          category: "model",
+          type: "select",
+          currentValue: state.currentModelId,
+          options: [
+            { value: "initial", name: "Initial" },
+            { value: "selected", name: "Selected" },
+          ],
+        },
+      ]
+    : []),
 ];
 const describe = (state) => ({
   modes: {
@@ -32,6 +52,21 @@ const describe = (state) => ({
 });
 const file = (id) => path.join(directory, `${id}.json`);
 const save = (id) => fs.writeFile(file(id), JSON.stringify(sessions.get(id)));
+async function holdControl(name, value) {
+  await fs.writeFile(path.join(directory, `${name}-entered`), value);
+  const deadline = Date.now() + 30000;
+  while (true) {
+    try {
+      await fs.access(path.join(directory, `${name}-release`));
+      return;
+    } catch (error) {
+      if (error.code !== "ENOENT" || Date.now() >= deadline) {
+        throw error;
+      }
+      await delay(5);
+    }
+  }
+}
 const connection = new AgentSideConnection(
   (client) => ({
     async initialize() {
@@ -49,9 +84,13 @@ const connection = new AgentSideConnection(
         mode: "normal",
         mcpServers,
         argv: process.argv.slice(3),
+        ...(modelControls ? { currentModelId: "initial", modelChanges: [] } : {}),
       };
       sessions.set(sessionId, state);
       await save(sessionId);
+      if (holdNewSession) {
+        await holdControl("session-new", sessionId);
+      }
       return { sessionId, ...describe(state) };
     },
     async loadSession({ sessionId, mcpServers }) {
@@ -61,16 +100,26 @@ const connection = new AgentSideConnection(
       return describe(state);
     },
     async setSessionMode({ sessionId, modeId }) {
+      if (holdModeControl && modeId === "review") {
+        await holdControl("mode-control", modeId);
+      }
       sessions.get(sessionId).mode = modeId;
       await save(sessionId);
       return {};
     },
     async setSessionConfigOption({ sessionId, configId, value }) {
-      if (configId !== "tone") {
+      const state = sessions.get(sessionId);
+      if (modelControls && configId === "model") {
+        if (value !== "initial" && value !== "selected") {
+          throw new Error("unknown model");
+        }
+        state.currentModelId = value;
+        state.modelChanges.push(value);
+      } else if (configId === "tone") {
+        state.tone = value;
+      } else {
         throw new Error("unknown option");
       }
-      const state = sessions.get(sessionId);
-      state.tone = value;
       await save(sessionId);
       return { configOptions: configOptions(state) };
     },
@@ -83,13 +132,34 @@ const connection = new AgentSideConnection(
           .join(""),
       );
       await save(sessionId);
+      if (modelControls) {
+        const effectsDirectory = path.join(directory, "effects");
+        await fs.mkdir(effectsDirectory, { recursive: true });
+        await fs.writeFile(
+          path.join(effectsDirectory, `${sessionId}.txt`),
+          state.history.join("\n"),
+        );
+      }
       await client.sessionUpdate({
         sessionId,
         update: {
           sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text: JSON.stringify({ sessionId, ...state }) },
+          content: {
+            type: "text",
+            text: holdPromptReply ? "First chunk" : JSON.stringify({ sessionId, ...state }),
+          },
         },
       });
+      if (holdPromptReply) {
+        await holdControl("prompt-reply", sessionId);
+        await client.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: " second chunk" },
+          },
+        });
+      }
       return { stopReason: "end_turn" };
     },
     async closeSession({ sessionId }) {

@@ -16,6 +16,7 @@ import {
   verifyPackageUpdateRecovery,
 } from "../../infra/update-global.js";
 import { recordUpdateRunPhase } from "../../infra/update-run-ledger.js";
+import { isFailedUpdateStep } from "../../infra/update-run-step.js";
 import { readCurrentGitUpdateRecovery } from "../../infra/update-runner-git-recovery.js";
 import type { UpdateRunResult } from "../../infra/update-runner.js";
 import { hasCommandProcessCleanupError } from "../../process/exec-result.js";
@@ -656,7 +657,7 @@ export async function executeMutableUpdate(
         nodeRunner: params.packageUpdateNodeRunner,
         validateCandidate: async (candidateRoot) => {
           const steps = await validateCandidate(candidateRoot);
-          const failed = steps.find((step) => step.exitCode !== 0 && !step.advisory);
+          const failed = steps.find(isFailedUpdateStep);
           if (failed) {
             throw new UpdatePreMutationError(
               failed.name,

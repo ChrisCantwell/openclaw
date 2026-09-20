@@ -100,6 +100,7 @@ export const databaseWorkerExtensionTestFiles = [
   "extensions/codex/src/app-server/run-attempt.hooks.test.ts",
   "extensions/codex/src/app-server/run-attempt.media-lifetime.test.ts",
   "extensions/codex/src/app-server/run-attempt.model-attribution.test.ts",
+  "extensions/codex/src/app-server/run-attempt.native-config.test.ts",
   "extensions/codex/src/app-server/run-attempt.native-hook-fallback.test.ts",
   "extensions/codex/src/app-server/run-attempt.native-hook-relay.test.ts",
   "extensions/codex/src/app-server/run-attempt.native-hook-relay-retention.test.ts",

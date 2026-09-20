@@ -277,7 +277,10 @@ These are intentionally guarded by `test/scripts/ci-workflow-guards.test.ts`:
 - Precise and fallback plugin groups retain separate child processes, including process-bounded
   configs. Compatible envelopes, including repeated configs, run one at a time
   within 240 predicted seconds without a pair-count limit; expanded serial compact
-  jobs use 210. Runtime preparation stays separate. Each original envelope retains
+  jobs use 210. The rebased 124-envelope inventory emits 50 extension rows and
+  125/119/130 PR Node rows on Blacksmith/hybrid/GitHub; push Node rows are
+  57/46/55 and compact PR rows are 77/71/82. These fit the landed 130/70/90
+  PR/push/compact caps without another increase. Runtime preparation stays separate. Each original envelope retains
   its file/process bounds, native shard arguments and worker limits. The complete supplemental boundary list runs in one job
   with four concurrent checks and one full-root focused-rule scan.
 - Measured Blacksmith chat/session, Gateway core-3 and infrastructure storage/state

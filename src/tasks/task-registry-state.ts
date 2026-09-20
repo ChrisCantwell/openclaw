@@ -213,7 +213,7 @@ export function syncFlowFromTaskAfterTaskMutationAsync(
   task: TaskRecord,
   operation: string,
   flowStore: ReturnType<typeof getTaskFlowRegistryStore>,
-): Promise<void> {
+): Promise<boolean> {
   return syncTaskFlowWithLiveRetryAsync(
     context,
     store,

@@ -4,7 +4,6 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupTempDirs, makeTempDir } from "../../../test/helpers/temp-dir.js";
-import * as triageUpdate from "../../commands/triage-update.js";
 import * as config from "../../config/config.js";
 import * as launchd from "../../daemon/launchd.js";
 import * as gatewayService from "../../daemon/service.js";
@@ -13,6 +12,7 @@ import { resolvePackageActivationAnchor } from "../../infra/package-update-activ
 import * as temporaryState from "../../infra/tmp-openclaw-dir.js";
 import * as updateCheck from "../../infra/update-check.js";
 import { CONTROL_PLANE_UPDATE_SENTINEL_META_ENV } from "../../infra/update-control-plane-sentinel.js";
+import * as failureArtifacts from "../../infra/update-failure-report-artifact.js";
 import * as updateGlobal from "../../infra/update-global.js";
 import * as handoffCleanup from "../../infra/update-managed-service-handoff-cleanup.js";
 import {
@@ -159,7 +159,7 @@ function pendingPackageInvocation(
     .mockResolvedValue(false);
   const runTriage = vi.fn(async () => ({ status: "cancelled" as const }));
   const prepareTriage = vi.spyOn(triage, "prepareUpdateFailureTriage").mockResolvedValue(runTriage);
-  const writeTriage = vi.spyOn(triageUpdate, "writeTriageUpdateFailure");
+  const writeTriage = vi.spyOn(failureArtifacts, "writeTriageUpdateFailure");
   const cleanupHandoffs = vi.spyOn(handoffCleanup, "cleanupStaleManagedServiceUpdateHandoffs");
   const loadPlugins = vi.spyOn(installedPlugins, "loadInstalledPluginIndexInstallRecords");
   const resumePostCore = vi
