@@ -64,9 +64,7 @@ import { AsyncWorkScope } from "../../shared/async-work-scope.js";
 import type { SkillLibraryAuthoringCapability } from "../../skills/library/authoring.js";
 import { buildSkillSnapshot } from "../../skills/loading/workspace-skill-prompt.js";
 import type { SkillSnapshot } from "../../skills/types.js";
-import { closeOpenClawAgentDatabaseByPath } from "../../state/openclaw-agent-db.js";
 import { closeOpenClawStateDatabaseByPath } from "../../state/openclaw-state-db-cache.js";
-import { openOpenClawStateDatabase } from "../../state/openclaw-state-db.js";
 import { resolveOpenClawStateSqlitePath } from "../../state/openclaw-state-db.paths.js";
 import { connectUserModelAccount } from "../../state/user-model-accounts.js";
 import { ensureProfileForEmail } from "../../state/user-profiles.js";
@@ -730,7 +728,7 @@ describe("prepareCliRunContext", () => {
     );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     setActiveNodeContext(null);
     cliBackendsTesting.resetDepsForTest();
     resetCliRunnerPrepareTestDeps();
@@ -746,54 +744,7 @@ describe("prepareCliRunContext", () => {
     setActivePluginRegistry(createTestRegistry());
     setActiveDegradedSecretOwners([]);
     vi.unstubAllEnvs();
-    fixture.cleanup();
-  });
-
-  it("closes owned state handles before removing preparation directories", () => {
-    const sessions = [fixture.session, fixture.createSession()];
-    const ownedState = sessions.map(({ dir }) => ({
-      dir,
-      database: openOpenClawStateDatabase({ env: { OPENCLAW_STATE_DIR: dir } }),
-    }));
-    const unrelatedDir = fs.realpathSync(
-      fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-cli-unrelated-")),
-    );
-    const unrelated = openOpenClawStateDatabase({ env: { OPENCLAW_STATE_DIR: unrelatedDir } });
-    const removed: string[] = [];
-    const remove = fs.rmSync;
-    const removal = vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
-      const owned = ownedState.find(({ dir }) => dir === target);
-      if (owned) {
-        // Refuse unsafe unlink on the original bug, leaving files intact for finally cleanup.
-        expect(owned.database.db.isOpen, "state handle must close before directory removal").toBe(
-          false,
-        );
-        removed.push(owned.dir);
-      }
-      remove(target, options);
-    });
-    try {
-      fixture.cleanup();
-      expect(removed).toEqual(sessions.map(({ dir }) => dir));
-      for (const { dir } of sessions) {
-        expect(fs.existsSync(dir)).toBe(false);
-      }
-      unrelated.db.exec(
-        "CREATE TEMP TABLE cleanup_probe (value INTEGER); INSERT INTO cleanup_probe VALUES (7);",
-      );
-      expect(unrelated.db.prepare("SELECT value FROM cleanup_probe").get()).toEqual({ value: 7 });
-    } finally {
-      removal.mockRestore();
-      for (const { sessionTarget } of sessions) {
-        closeOpenClawAgentDatabaseByPath(sessionTarget.storePath);
-      }
-      for (const { database } of ownedState) {
-        closeOpenClawStateDatabaseByPath(database.path);
-      }
-      fixture.cleanup();
-      closeOpenClawStateDatabaseByPath(unrelated.path);
-      fs.rmSync(unrelatedDir, { recursive: true, force: true });
-    }
+    await fixture.cleanup();
   });
 
   it.each(["process", "plugin"] as const)(

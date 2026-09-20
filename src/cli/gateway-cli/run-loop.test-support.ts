@@ -66,7 +66,7 @@ export function createSignaledStart(
 }
 
 export const shutdownBudgetCases: {
-  signal: "SIGTERM" | "SIGUSR1";
+  signal: "SIGTERM" | "SIGUSR2";
   honorsAbort: boolean;
   supervisor: "systemd" | "external-systemd" | "launchd" | "foreground";
   waitMs?: number;
@@ -80,7 +80,7 @@ export const shutdownBudgetCases: {
     installedStopMs: 90_000,
   },
   {
-    signal: "SIGUSR1",
+    signal: "SIGUSR2",
     honorsAbort: false,
     supervisor: "external-systemd",
     installedStopMs: 90_000,
@@ -88,11 +88,11 @@ export const shutdownBudgetCases: {
   { signal: "SIGTERM", honorsAbort: false, supervisor: "systemd" },
   { signal: "SIGTERM", honorsAbort: false, supervisor: "foreground" },
   { signal: "SIGTERM", honorsAbort: true, supervisor: "systemd" },
-  { signal: "SIGUSR1", honorsAbort: false, supervisor: "systemd" },
+  { signal: "SIGUSR2", honorsAbort: false, supervisor: "systemd" },
   { signal: "SIGTERM", honorsAbort: false, supervisor: "launchd" },
-  { signal: "SIGUSR1", honorsAbort: false, supervisor: "launchd" },
-  { signal: "SIGUSR1", honorsAbort: false, supervisor: "systemd", waitMs: 0 },
-  { signal: "SIGUSR1", honorsAbort: false, supervisor: "systemd", waitMs: 600_000 },
+  { signal: "SIGUSR2", honorsAbort: false, supervisor: "launchd" },
+  { signal: "SIGUSR2", honorsAbort: false, supervisor: "systemd", waitMs: 0 },
+  { signal: "SIGUSR2", honorsAbort: false, supervisor: "systemd", waitMs: 600_000 },
 ];
 
 export const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
@@ -107,7 +107,7 @@ export function setPlatform(platform: string) {
   });
 }
 
-const LOOP_SIGNALS = ["SIGTERM", "SIGINT", "SIGUSR1"] as const;
+const LOOP_SIGNALS = ["SIGTERM", "SIGINT", "SIGUSR2"] as const;
 type LoopSignal = (typeof LOOP_SIGNALS)[number];
 
 function removeNewSignalListeners(signal: LoopSignal, existing: Set<(...args: unknown[]) => void>) {
@@ -223,8 +223,8 @@ export type UpdateRespawnResultFixture = {
 
 export function registerUpdateRespawnProgressTests({
   runLoopWithStart,
-  peekGatewaySigusr1RestartReason,
-  consumeGatewaySigusr1RestartIntent,
+  peekGatewayRestartReason,
+  consumeGatewayRestartIntent,
   respawnGatewayProcessForUpdate,
   readRestartSentinelReadOnly,
   waitForGatewayHealthyRestart,
@@ -238,8 +238,8 @@ export function registerUpdateRespawnProgressTests({
     runtime: ReturnType<typeof createRuntimeWithExitSignal>["runtime"];
     lockPort: number;
   }) => Promise<unknown>;
-  peekGatewaySigusr1RestartReason: Mock<() => string | undefined>;
-  consumeGatewaySigusr1RestartIntent: Mock<() => GatewayRestartIntent | null>;
+  peekGatewayRestartReason: Mock<() => string | undefined>;
+  consumeGatewayRestartIntent: Mock<() => GatewayRestartIntent | null>;
   respawnGatewayProcessForUpdate: Mock<
     (_opts?: { env?: NodeJS.ProcessEnv }) => UpdateRespawnResultFixture
   >;
@@ -264,8 +264,8 @@ export function registerUpdateRespawnProgressTests({
     "leaves a $waitOutcome replacement running after $elapsedMs ms",
     async ({ waitOutcome, elapsedMs, closeMs, sentinelStatus }) => {
       vi.clearAllMocks();
-      peekGatewaySigusr1RestartReason.mockReturnValue("update.run");
-      consumeGatewaySigusr1RestartIntent.mockReturnValueOnce({ reason: "update.run", force: true });
+      peekGatewayRestartReason.mockReturnValue("update.run");
+      consumeGatewayRestartIntent.mockReturnValueOnce({ reason: "update.run", force: true });
       const kill = vi.fn();
       readRestartSentinelReadOnly.mockResolvedValueOnce({
         version: 1,
@@ -295,10 +295,10 @@ export function registerUpdateRespawnProgressTests({
         const { runtime, exited } = createRuntimeWithExitSignal();
         await runLoopWithStart({ start, runtime, lockPort: 18789 });
         await waitForStart(started);
-        const sigusr1 = captureSignal("SIGUSR1");
+        const restartSignal = captureSignal("SIGUSR2");
 
         vi.useFakeTimers();
-        sigusr1();
+        restartSignal();
         await vi.advanceTimersByTimeAsync(10_000);
         expect(runtime.exit).not.toHaveBeenCalled();
         expect(kill).not.toHaveBeenCalled();

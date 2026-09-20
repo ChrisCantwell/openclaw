@@ -242,7 +242,7 @@ export function renderChatComposerView(context: ChatComposerViewContext) {
       : state.dictationError
         ? { text: state.dictationError, tone: "danger" as const, icon: icons.alertTriangle }
         : offlineText
-          ? { text: offlineText, tone: "warn" as const, icon: icons.globeOff }
+          ? { text: offlineText, tone: "info" as const, icon: icons.inbox }
           : null;
   const composerStatus =
     showComposerInput && primaryComposerStatus

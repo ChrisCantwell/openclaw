@@ -11,15 +11,15 @@ export {
 } from "../../infra/process-respawn.js";
 export {
   resolveGatewayRestartDeferralTimeoutMs,
-  consumeGatewaySigusr1RestartIntent,
-  consumeGatewaySigusr1RestartAuthorization,
-  isGatewaySigusr1RestartExternallyAllowed,
-  markGatewaySigusr1RestartHandled,
-  peekGatewaySigusr1RestartReason,
+  consumeGatewayRestartIntent,
+  consumeGatewayRestartAuthorization,
+  isGatewayRestartExternallyAllowed,
+  markGatewayRestartHandled,
+  peekGatewayRestartReason,
   resetGatewayRestartStateForInProcessRestart,
   requestGatewayRestartWithSignalAdmission,
   rollbackGatewayRestartSignalAdmission,
-  scheduleGatewaySigusr1Restart,
+  scheduleGatewayRestart,
 } from "../../infra/restart.js";
 export {
   consumeGatewayRestartIntentPayloadSync,

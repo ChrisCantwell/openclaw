@@ -252,7 +252,6 @@ it("keeps the captured core backend when a plugin becomes selected", async () =>
         taskId: created.taskId,
         status: "failed",
         endedAt: 2,
-        lastEventAt: 2,
         error: "failed",
         deliveryStatus: "not_applicable",
       },

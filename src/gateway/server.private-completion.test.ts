@@ -31,10 +31,7 @@ import {
 } from "../state/openclaw-agent-pending-inputs-schema.js";
 import { setAbortedAgentDedupeEntries } from "./agent-turn/agent-dedupe.js";
 import * as agentJobs from "./agent-turn/agent-job.js";
-import {
-  waitForChatAbortControllerRemoval,
-  waitForChatAbortTerminalPersistence,
-} from "./chat-abort-lifecycle-internal.js";
+import { waitForChatAbortControllerRemoval } from "./chat-abort-lifecycle-internal.js";
 import { abortChatRunById } from "./chat-abort.js";
 import { dispatchGatewayMethodInProcess } from "./server-plugin-in-process-dispatch.js";
 import { startGatewayServerHarness, type GatewayServerHarness } from "./server.e2e-ws-harness.js";
@@ -734,6 +731,8 @@ describe("private subagent completion processing receipts", () => {
           expect(terminalWrite).toBeInstanceOf(Promise);
           await vi.advanceTimersByTimeAsync(60_000);
           expect(kernel.gatewayRequestContext.chatAbortControllers.has(runId)).toBe(false);
+          expect(active.projectSessionTerminalPending).toBe(true);
+          expect(active.projectSessionTerminalPersistence).toBe(terminalWrite);
           expect(JSON.parse(String(completions()[0]?.outcome_json))).toMatchObject({
             reason: "timed_out",
             status: "timeout",
@@ -762,19 +761,13 @@ describe("private subagent completion processing receipts", () => {
       const outcome = JSON.parse(String(rows[0]?.outcome_json));
       expect(response).toMatchObject({ value: { status: "timeout", stopReason: "timeout" } });
       expect(outcome).toMatchObject({ status: "timeout", stopReason: "timeout" });
-      if (kind === "abandoned") {
-        // Maintenance already retired this registration; its captured write
-        // still owns persistence independently of the registration map.
-        await expect(waitForChatAbortTerminalPersistence(active)).resolves.toBeUndefined();
-      } else {
-        expect(
-          await waitForChatAbortControllerRemoval({
-            entries: kernel.gatewayRequestContext.chatAbortControllers,
-            targets: [{ runId, entry: active }],
-            timeoutMs: SESSION_WORK_ADMISSION_DRAIN_TIMEOUT_MS,
-          }),
-        ).toBe(true);
-      }
+      expect(
+        await waitForChatAbortControllerRemoval({
+          entries: kernel.gatewayRequestContext.chatAbortControllers,
+          targets: [{ runId, entry: active }],
+          timeoutMs: SESSION_WORK_ADMISSION_DRAIN_TIMEOUT_MS,
+        }),
+      ).toBe(true);
       expect(kernel.gatewayRequestContext.chatAbortControllers.has(runId)).toBe(false);
       if (kind === "resolved") {
         expect(outcome).toMatchObject({

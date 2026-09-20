@@ -2477,7 +2477,7 @@ src/config/sessions/session-accessor.sqlite-entry-cache.ts	2
 src/config/sessions/session-accessor.sqlite-entry.ts	1
 src/config/sessions/session-accessor.sqlite-message-cut.ts	1
 src/config/sessions/session-accessor.sqlite-parent-fork.ts	1
-src/config/sessions/session-accessor.sqlite-read.ts	12
+src/config/sessions/session-accessor.sqlite-read.ts	11
 src/config/sessions/session-accessor.sqlite-recovery.ts	1
 src/config/sessions/session-accessor.sqlite-reset-window.ts	2
 src/config/sessions/session-accessor.sqlite-transcript-message-append.ts	1
@@ -3182,7 +3182,7 @@ src/plugins/hook-decision-types.ts	1
 src/plugins/hook-isolation.ts	3
 src/plugins/hook-runner-global-state.ts	1
 src/plugins/hook-types.ts	2
-src/plugins/hooks.ts	13
+src/plugins/hooks.ts	12
 src/plugins/host-hook-attachments.ts	2
 src/plugins/host-hook-json.ts	1
 src/plugins/host-hook-runtime.ts	1
@@ -3623,7 +3623,7 @@ ui/src/lib/chat/tool-cards.ts	2
 ui/src/lib/chat/tool-display.ts	1
 ui/src/lib/config-form-utils.ts	7
 ui/src/lib/config/config-draft-model.ts	3
-ui/src/lib/cron/index.ts	11
+ui/src/lib/cron/index.ts	9
 ui/src/lib/gateway-diagnostics.ts	2
 ui/src/lib/gateway-errors.ts	1
 ui/src/lib/keyboard-shortcuts.ts	1

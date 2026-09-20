@@ -103,6 +103,7 @@ describe("export name collision guard", () => {
         "src/boards/sqlite-board-store.worker.ts",
         "src/agents/sessions/session-manager-metadata.worker.ts",
         "src/config/sessions/session-sharing-store.worker.ts",
+        "src/infra/heartbeat-outcome-store.worker.ts",
       ],
     },
   ])("limits $name to its approved worker modules", ({ name, paths }) => {

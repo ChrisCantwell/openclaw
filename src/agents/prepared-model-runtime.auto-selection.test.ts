@@ -9,6 +9,7 @@ import {
   loadPublishedGatewayReplyDispatchRuntime,
   refreshPreparedModelRuntimeSnapshots,
 } from "./prepared-model-runtime.js";
+import { createPreparedModelRuntimeReplacement } from "./prepared-model-runtime.lifecycle.js";
 import * as owners from "./prepared-model-runtime.owner.js";
 import { PreparedModelRuntimeOwnerRetention } from "./prepared-model-runtime.retention.js";
 
@@ -87,7 +88,7 @@ describe("prepared model runtime automatic selections", () => {
   });
 
   it("rejects a settled replacement that never publishes instead of spinning", async () => {
-    const replacement = owners.createPreparedModelRuntimeReplacement();
+    const replacement = createPreparedModelRuntimeReplacement();
     replacement.resolve();
     let iterations = 0;
     await expect(
