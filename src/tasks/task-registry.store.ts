@@ -18,6 +18,7 @@ import {
   closeTaskRegistryDatabase,
   deleteTaskAndDeliveryStateFromSqlite,
   loadTaskRegistryStateFromSqlite,
+  repairLegacyTaskIdentifiersInSqlite,
   loadTaskRegistryMutationStateFromSqlite,
   upsertTaskWithDeliveryStateToSqlite,
   upsertTaskDeliveryStateToSqlite,
@@ -67,7 +68,9 @@ export type TaskRegistryStore = TaskExecutionRestoreStore & {
     context: OpenClawStateWorkerContext,
     scope?: TaskRegistryMutationScope,
   ) => Promise<TaskRegistryStoreSnapshot>;
-  loadMutationSnapshot?: (scope: TaskRegistryMutationScope) => TaskRegistryStoreSnapshot;
+  loadMutationSnapshot?: (
+    scopes: readonly TaskRegistryMutationScope[],
+  ) => TaskRegistryStoreSnapshot;
   listTasksForOwnerKey?: (ownerKey: string) => Promise<TaskRecord[]>;
   deleteTaskWithDeliveryState: (taskId: string) => void;
   upsertDeliveryState: (state: TaskDeliveryState) => void;
@@ -114,6 +117,7 @@ const defaultTaskRegistryStore: TaskRegistryStore = {
       scope.execute({ type: "flows.syncMirroredTask", input: params }),
     );
   },
+  repairLegacyIdentifiers: repairLegacyTaskIdentifiersInSqlite,
   loadSnapshot: loadTaskRegistryStateFromSqlite,
   async loadMutationSnapshotAsync(context, scope) {
     const { executeOpenClawStateWorker } = await import("../state/openclaw-state-worker-store.js");

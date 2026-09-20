@@ -113,6 +113,7 @@ export async function runGatewayLoop(params: {
     { includeLinuxOpenClawGatewayServiceMarker: true },
   );
   const supervisorMode = supervisor?.kind ?? null;
+  const restartDecision = eagerLifecycleRuntime.resolveGatewayRestartDecision();
   let lock = await acquireGatewayLock({
     port: params.lockPort,
     listenerMode: supervisorMode ? "supervised" : "foreground",
@@ -443,6 +444,7 @@ export async function runGatewayLoop(params: {
     }
 
     const respawnOptions = {
+      decision: restartDecision,
       env: createGatewayRestartTraceHandoffEnv(captureGatewayRestartTraceHandoff()),
     };
     const isStandaloneUpdate = isUpdateRestart && !supervisorMode;
@@ -578,6 +580,7 @@ export async function runGatewayLoop(params: {
   };
   const {
     nativeStopBudget,
+    restartTimeoutMs,
     timeoutMs: acceptedShutdownTimeoutMs,
     reserveMs: RESTART_CLOSE_REPLY_DRAIN_SHUTDOWN_RESERVE_MS,
     cleanupDeadline,
@@ -686,6 +689,7 @@ export async function runGatewayLoop(params: {
     const { action, restartIntent } = acceptedRequest;
     logShutdownBudget("shutdown");
     const isRestart = action !== "stop";
+    const restartWithoutSupervisor = action === "restart" && restartDecision.mode === "disabled";
     const acceptedStartupOperations = startupOperations;
     if (acceptedRequest.action === "stop") {
       // A queued restart still needs startup's close handle. Only an effective
@@ -708,7 +712,7 @@ export async function runGatewayLoop(params: {
       }
       shutdownDeadline = performance.now() + forceExitMs;
       forceExitTimer = setTimeout(() => {
-        const cleanExit = nativeStopBudget && !shutdownFailure;
+        const cleanExit = nativeStopBudget && !restartWithoutSupervisor && !shutdownFailure;
         gatewayLog.warn(
           `shutdown deadline reached; abandoning unfinished cleanup and active work before ${action}; last observed: ${lastDrainCounts}; exiting ${cleanExit ? "cleanly" : "with incomplete cleanup"}`,
         );
@@ -769,12 +773,7 @@ export async function runGatewayLoop(params: {
       if (!isRestart) {
         armForceExitTimer(acceptedShutdownTimeoutMs);
       } else if (restartDrainTimeoutMs !== undefined && !getManagedUpdateOwner()) {
-        armForceExitTimer(
-          restartDrainTimeoutMs +
-            (nativeStopBudget
-              ? RESTART_CLOSE_REPLY_DRAIN_SHUTDOWN_RESERVE_MS
-              : SHUTDOWN_TIMEOUT_MS),
-        );
+        armForceExitTimer(restartTimeoutMs(restartDrainTimeoutMs, restartWithoutSupervisor));
       }
 
       const drainTimeoutMs = isRestart
@@ -824,27 +823,27 @@ export async function runGatewayLoop(params: {
               reportDrainSnapshot(initialSnapshot);
               if (restartIntent?.force) {
                 gatewayLog.warn("forced restart requested; skipping active work drain");
-                return;
-              }
-
-              const remainingDrainTimeoutMs =
-                restartDrainDeadlineAt === undefined
-                  ? undefined
-                  : Math.max(0, restartDrainDeadlineAt - Date.now());
-              const drain = await waitForGatewayActiveWork(remainingDrainTimeoutMs, {
-                onSnapshot: reportDrainSnapshot,
-              });
-              if (drain.drained) {
-                if (!initialSnapshot.idle) {
-                  gatewayLog.info("all active work drained");
+              } else {
+                const remainingDrainTimeoutMs =
+                  restartDrainDeadlineAt === undefined
+                    ? undefined
+                    : Math.max(0, restartDrainDeadlineAt - Date.now());
+                const drain = await waitForGatewayActiveWork(remainingDrainTimeoutMs, {
+                  onSnapshot: reportDrainSnapshot,
+                });
+                if (drain.drained) {
+                  if (!initialSnapshot.idle) {
+                    gatewayLog.info("all active work drained");
+                  }
+                  return;
                 }
-                return;
+                drainTimedOut = true;
+                gatewayLog.warn(
+                  `active-work drain timeout reached; proceeding with restart: ${formatDrainCounts(drain.snapshot)}`,
+                );
               }
-              drainTimedOut = true;
+              // Connection work can retain cron cleanup; cancel before close joins it.
               eagerLifecycleRuntime.abortActiveCronTaskRuns("Gateway restarting.");
-              gatewayLog.warn(
-                `active-work drain timeout reached; proceeding with restart: ${formatDrainCounts(drain.snapshot)}`,
-              );
             },
             () => [
               ["activeWork", activeWorkAtDrainStart],

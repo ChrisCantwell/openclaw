@@ -42,6 +42,7 @@ import {
   readDeferredPluginMigrations,
   type DeferredPluginMigration,
 } from "../infra/deferred-plugin-migrations.js";
+import { SqliteSnapshotCleanupError } from "../infra/sqlite-readonly-location-cleanup.js";
 import { prepareSqliteReadOnlyLocationSync } from "../infra/sqlite-snapshot-source.js";
 import { resolveUpdateRehearsalRoot } from "../infra/update-rehearsal-paths.js";
 import {
@@ -53,6 +54,7 @@ import { closeOpenClawStateDatabaseByPathAsync } from "../state/openclaw-state-d
 import {
   withArtifactPreservingStateReads,
   withDisposableOpenClawStateReads,
+  withOpenClawStateDatabaseReadSnapshot,
 } from "../state/openclaw-state-db-readonly.js";
 import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths.js";
 import { isPostCoreConvergencePass, isUpdateDoctorLintPass } from "./doctor/shared/update-phase.js";
@@ -187,6 +189,33 @@ async function prepareDoctorLintExecution(
   const cleanupWarnings: HealthFinding[] | undefined = isUpdateDoctorLintPass(sourceEnv)
     ? []
     : undefined;
+  const run = () =>
+    prepareDoctorLintStateExecution(runtime, opts, sevMin, sourceEnv, cleanupWarnings);
+  // Full reports share private source bytes. Selected checks retain on-demand inspection.
+  if (opts.onlyIds?.length) {
+    return await run();
+  }
+  let execution: DoctorLintExecution | undefined;
+  try {
+    return await withOpenClawStateDatabaseReadSnapshot(async () => (execution = await run()), {
+      env: sourceEnv,
+    });
+  } catch (error) {
+    if (!execution || !cleanupWarnings || !(error instanceof SqliteSnapshotCleanupError)) {
+      throw error;
+    }
+    recordSnapshotCleanupWarning(cleanupWarnings);
+    return execution;
+  }
+}
+
+async function prepareDoctorLintStateExecution(
+  runtime: RuntimeEnv,
+  opts: DoctorLintCliOptions,
+  sevMin: NonNullable<ReturnType<typeof parseHealthFindingSeverity>>,
+  sourceEnv: NodeJS.ProcessEnv,
+  cleanupWarnings: HealthFinding[] | undefined,
+): Promise<DoctorLintExecution> {
   const updateReadiness = isPostCoreConvergencePass(sourceEnv) ? "post-plugin" : undefined;
   const effectiveOpts: DoctorLintCliOptions = updateReadiness ? { ...opts, updateReadiness } : opts;
   const pluginStateMode = resolveBundledHealthCheckPluginStateMode(effectiveOpts);
@@ -467,13 +496,7 @@ async function withReadOnlyPluginStateSnapshot<T>(
         }
         // Only disposal of private bytes is advisory. Preserve the detector's outcome;
         // filtering its later error would lose real findings hidden by cleanup failure.
-        cleanupWarnings.push({
-          checkId: "core/doctor/lint-state-inspection",
-          severity: "warning",
-          requirement: "temporary-snapshot-cleanup",
-          message,
-          fixHint: "Rerun `openclaw doctor --lint` after the update to check snapshot cleanup.",
-        });
+        recordSnapshotCleanupWarning(cleanupWarnings);
       }
     } catch (error) {
       throw new DoctorLintStateSnapshotError(error);
@@ -482,6 +505,16 @@ async function withReadOnlyPluginStateSnapshot<T>(
       throw runStarted ? outcome.error : new DoctorLintStateSnapshotError(outcome.error);
     }
     return outcome.value;
+  });
+}
+
+function recordSnapshotCleanupWarning(warnings: HealthFinding[]): void {
+  warnings.push({
+    checkId: "core/doctor/lint-state-inspection",
+    severity: "warning",
+    requirement: "temporary-snapshot-cleanup",
+    message: "Temporary doctor lint state snapshot cleanup did not complete.",
+    fixHint: "Rerun `openclaw doctor --lint` after the update to check snapshot cleanup.",
   });
 }
 

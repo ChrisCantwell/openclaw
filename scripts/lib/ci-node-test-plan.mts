@@ -304,7 +304,7 @@ const COMPACT_GITHUB_MAX_PREDICTED_SECONDS = 150;
 const COMPACT_HOSTED_STORAGE_STATE_MAX_FILES = 64;
 // Trusted forks can use the GitHub profile on Blacksmith. Every compact
 // profile must fit the same runner-registration allowance.
-const COMPACT_NODE_TEST_JOB_CAP = 80;
+const COMPACT_NODE_TEST_JOB_CAP = 90;
 const COMPACT_NODE_TEST_JOB_GROUPS = 10;
 const COMPACT_TOOLING_NODE_TEST_GROUPS = 16;
 const COMPACT_WHOLE_NODE_TEST_TIMEOUT_MINUTES = 120;

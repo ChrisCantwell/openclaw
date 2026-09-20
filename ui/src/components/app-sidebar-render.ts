@@ -235,6 +235,7 @@ export function renderAppSidebarBrand(
                 className:
                   "sidebar-brand__icon sidebar-brand__header-control sidebar-brand__new-thread",
                 label: t("agentChip.newConversation"),
+                showShortcut: true,
                 disabledReason: newSessionAccess.allowed ? undefined : newSessionAccess.reason,
                 onOpen: (agentId, target) => host.requestOpenNewSession(agentId, target),
               })

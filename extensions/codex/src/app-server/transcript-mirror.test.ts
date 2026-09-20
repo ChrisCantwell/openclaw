@@ -578,7 +578,7 @@ describe("mirrorCodexAppServerTranscript", () => {
             const { display: _display, ...message } = (
               event as { message: Record<string, unknown> }
             ).message;
-            return { message: castAgentMessage(message) };
+            return { message: castAgentMessage({ ...message, display: true }) };
           },
         },
       ]),

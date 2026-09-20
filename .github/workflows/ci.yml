@@ -376,19 +376,25 @@ jobs:
               except ProcessLookupError:
                   return False
               except PermissionError:
-                  # Darwin can report EPERM for a zombie-only group. Only a checked
-                  # census proving no live members can authorize continuing.
-                  if group_alive(pgid, deadline):
+                  # Darwin can refuse signals while members are exiting but not yet zombies.
+                  # Keep those members pending until drain proves termination; never accept a live denial.
+                  states = group_states(pgid, deadline)
+                  if any(not state.startswith("Z") and not (sys.platform == "darwin" and "E" in state)
+                         for state in states):
                       raise
-                  return False
+                  return any(not state.startswith("Z") for state in states)
               return True
 
 
           def group_alive(pgid, deadline):
+              return any(not state.startswith("Z") for state in group_states(pgid, deadline))
+
+
+          def group_states(pgid, deadline):
               try:
                   os.killpg(pgid, 0)
               except ProcessLookupError:
-                  return False
+                  return []
               except PermissionError:
                   pass  # EPERM can mean zombie-only; the census must still prove extinction.
               # Darwin -g selects a group; procps selects its session (a superset because
@@ -417,13 +423,13 @@ jobs:
                   states = [state for group, state in (line.split() for line in result.stdout.splitlines())
                             if int(group) == pgid]
               if states:
-                  return any(not state.startswith("Z") for state in states)
+                  return states
               # Empty selection (exit 1), or a session with only other groups, can race
               # extinction. Require native ESRCH; a bare status 1 or EPERM proves nothing.
               try:
                   os.killpg(pgid, 0)
               except ProcessLookupError:
-                  return False
+                  return []
               raise RuntimeError("Process group census missed a present group")
 
 
@@ -1785,7 +1791,7 @@ jobs:
             });
           const nodeTestNonDistShards = nodeTestShards.filter((shard) => !shard.requires_dist);
           // Bound the final matrix: precise plans and appended plugin rows can bypass compact caps.
-          const nodeMatrixLimit = compactPlanMode === "pull-request" ? 120 : 64;
+          const nodeMatrixLimit = compactPlanMode === "pull-request" ? 130 : 70;
           if (compactPlanMode && nodeTestNonDistShards.length > nodeMatrixLimit) {
             throw new Error(
               `Canonical ${eventName} Node matrix has ${nodeTestNonDistShards.length} jobs, exceeding limit ${nodeMatrixLimit}`,
@@ -6112,6 +6118,19 @@ jobs:
         with:
           name: fleet-cache-docker-proof
           path: .artifacts/docker-tests/**/fleet-cache.log
+          include-hidden-files: true
+          if-no-files-found: warn
+
+      - name: Upload sanitized upgrade survivor proof
+        if: always() && contains(format(' {0} ', needs.preflight.outputs.docker_seed_lanes), ' published-upgrade-survivor ')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docker-seed-upgrade-survivor-proof
+          path: |
+            .artifacts/docker-tests/????????T??????Z/summary.json
+            .artifacts/docker-tests/????????T??????Z/failures.json
+            .artifacts/docker-tests/upgrade-survivor-*/summary.json
+            .artifacts/docker-tests/upgrade-survivor-*/failure.json
           include-hidden-files: true
           if-no-files-found: warn
 

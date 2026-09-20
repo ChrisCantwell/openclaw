@@ -352,6 +352,7 @@ export function resolveEffectiveToolInventory(
   const effectiveTools = createOpenClawCodingTools({
     agentId,
     sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
     workspaceDir,
     agentDir,
     config: params.cfg,

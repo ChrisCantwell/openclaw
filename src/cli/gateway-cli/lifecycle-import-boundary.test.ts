@@ -76,6 +76,7 @@ describe("gateway lifecycle hub import boundaries", () => {
       const idle = createActiveWorkSnapshot();
       const hub = {
         detectGatewayRespawnSupervisorIdentity: () => ({ kind: "systemd" as const, name: "test" }),
+        resolveGatewayRestartDecision: () => ({ mode: "supervised", supervisor: "systemd" }),
         requestGatewayRestartWithSignalAdmission:
           vi.fn<LifecycleRuntime["requestGatewayRestartWithSignalAdmission"]>(),
         isGatewayRestartExternallyAllowed: () => false,

@@ -3776,7 +3776,6 @@
     {"id":"native.apple.237c19b063897303","source":"Using %@","surface":"apple","sites":[{"kind":"ui-localized-call","path":"apps/ios/ActivityWidget/OpenClawLiveActivity.swift"}]},
     {"id":"native.apple.0ec723c771546dbc","source":"Using a tool","surface":"apple","sites":[{"kind":"ui-call","path":"apps/ios/ActivityWidget/OpenClawLiveActivity.swift"}]},
     {"id":"native.apple.c3c2118eb2033d3a","source":"Using existing gateway instance","surface":"apple","sites":[{"kind":"ui-localized-call","path":"apps/macos/Sources/OpenClaw/ConnectionSettingsView.swift"}]},
-    {"id":"native.apple.68a60d60d185835d","source":"Using session default","surface":"apple","sites":[{"kind":"ui-call","path":"apps/shared/OpenClawKit/Sources/OpenClawChatUI/ChatEffortControl.swift"}]},
     {"id":"native.apple.a9ea4e4e825d5ec9","source":"VPS with domain","surface":"apple","sites":[{"kind":"ui-named-argument","path":"apps/ios/Sources/Onboarding/OnboardingWizardConnectionSections.swift"}]},
     {"id":"native.apple.6599c3e4ffa909af","source":"Value","surface":"apple","sites":[{"kind":"ui-call","path":"apps/ios/Sources/Settings/GatewayCustomHeadersSettingsView.swift"},{"kind":"ui-localized-call","path":"apps/macos/Sources/OpenClaw/OnboardingAISetupSheet.swift"},{"kind":"ui-localized-call","path":"apps/shared/OpenClawKit/Sources/OpenClawChatUI/ChatModelSignIn.swift"}]},
     {"id":"native.apple.e6f37b21bbbc6c5c","source":"Verbose","surface":"apple","sites":[{"kind":"ui-localized-call","path":"apps/macos/Sources/OpenClaw/StatusMenuSessions.swift"}]},

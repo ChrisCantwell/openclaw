@@ -125,6 +125,11 @@ describe("test runtime prerequisites", () => {
       "runtime",
     ],
     [
+      "native catalog worker capture custody",
+      ["src/agents/prepared-model-catalog-worker.custody.integration.test.ts"],
+      "runtime",
+    ],
+    [
       "native Google Meet SDK",
       ["extensions/google-meet/src/transports/chrome-startup.test.ts"],
       "runtime",
@@ -316,6 +321,7 @@ describe("test runtime prerequisites", () => {
       [
         "agent-command-local.test.ts",
         "simple-completion-runtime.plugin-scope.test.ts",
+        "prepared-model-catalog-worker.custody.integration.test.ts",
         "prepared-model-catalog-worker.integration.test.ts",
         "runtime-plugins.context-engine.integration.test.ts",
       ],
@@ -326,6 +332,7 @@ describe("test runtime prerequisites", () => {
       [
         "agent-command-local.test.ts",
         "simple-completion-runtime.plugin-scope.test.ts",
+        "prepared-model-catalog-worker.custody.integration.test.ts",
         "prepared-model-catalog-worker.integration.test.ts",
         "runtime-plugins.context-engine.integration.test.ts",
       ],
@@ -2716,16 +2723,19 @@ describe("scripts/test-projects changed-target routing", () => {
     }
   });
 
+  const embeddedRunWorkerFiles = [
+    "src/agents/embedded-agent-runner/run/model-setup.ownership.test.ts",
+    "src/agents/embedded-agent-runner/run/model-setup.selected-model.test.ts",
+    "src/agents/embedded-agent-runner/run/runtime-preparation.thinking.test.ts",
+    "src/agents/embedded-agent-runner/run/run-attempt-dispatch.owner.test.ts",
+    "src/agents/embedded-agent-runner/run/failover-retry-controller.inline-auth.worker.test.ts",
+  ];
+
   it.each([
     {
       directory: "src/agents/embedded-agent-runner/run",
       config: "test/vitest/vitest.agents-embedded-agent-run.config.ts",
-      workerFiles: [
-        "src/agents/embedded-agent-runner/run/model-setup.ownership.test.ts",
-        "src/agents/embedded-agent-runner/run/model-setup.selected-model.test.ts",
-        "src/agents/embedded-agent-runner/run/runtime-preparation.thinking.test.ts",
-        "src/agents/embedded-agent-runner/run/run-attempt-dispatch.owner.test.ts",
-      ],
+      workerFiles: embeddedRunWorkerFiles,
     },
     {
       directory: "src/agents/runtime-plan",
@@ -2784,12 +2794,7 @@ describe("scripts/test-projects changed-target routing", () => {
       {
         config: "test/vitest/vitest.infra.config.ts",
         forwardedArgs: ["--sequence.shuffle", "--sequence.seed", "3"],
-        includePatterns: [
-          "src/agents/embedded-agent-runner/run/model-setup.ownership.test.ts",
-          "src/agents/embedded-agent-runner/run/model-setup.selected-model.test.ts",
-          "src/agents/embedded-agent-runner/run/runtime-preparation.thinking.test.ts",
-          "src/agents/embedded-agent-runner/run/run-attempt-dispatch.owner.test.ts",
-        ],
+        includePatterns: embeddedRunWorkerFiles,
         watchMode: false,
       },
       {

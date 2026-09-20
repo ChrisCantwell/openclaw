@@ -16,6 +16,10 @@ import type { CronRunRecoveryWorkerOperations } from "../cron/store/run-recovery
 import type { CronStoreSaveWorkerOperations } from "../cron/store/save-worker.types.js";
 import type { FleetRegistryWriteOperations } from "../fleet/registry.types.js";
 import type {
+  RepositoryGitHubPublicationPendingQuery,
+  RepositoryGitHubPublicationStatusRow,
+} from "../gateway/github-repository-publication.kernel.js";
+import type {
   ManagedImageRecord,
   ManagedImageRecordEntry,
 } from "../gateway/managed-image-record-store.types.js";
@@ -48,6 +52,7 @@ import type {
 import type { SessionUpstreamLink } from "../sessions/session-upstream-links.kernel.js";
 import type { DeviceAuthEntry } from "../shared/device-auth.js";
 import type { commitSkillUploadInDatabase } from "../skills/lifecycle/upload-store-commit.js";
+import type { listStoredSkillProposalEventsInDatabase } from "../skills/workshop/store-sqlite-event.js";
 import type { SkillProposalEvent, SkillProposalRecord } from "../skills/workshop/types.js";
 import type { TaskRegistryWorkerOperations } from "../tasks/task-registry.worker-contract.js";
 import type { TranscriptReadOperations } from "../transcripts/store-worker-contract.js";
@@ -80,6 +85,10 @@ export type OpenClawStateWorkerOperations = WebPushWorkerOperations &
   DeliveryQueueWorkerOperations &
   TranscriptReadOperations &
   TaskRegistryWorkerOperations & {
+    "githubRepository.personalPending": {
+      input: RepositoryGitHubPublicationPendingQuery;
+      output: RepositoryGitHubPublicationStatusRow | undefined;
+    };
     "skillUploads.commit": {
       input: Parameters<typeof commitSkillUploadInDatabase>[0];
       output: ReturnType<typeof commitSkillUploadInDatabase>;
@@ -172,6 +181,10 @@ export type OpenClawStateWorkerOperations = WebPushWorkerOperations &
     "projects.resolveRefreshOwner": {
       input: { project: ProjectRegistryIdentity; lease: OpenClawStateLeaseIdentity };
       output: ProjectRegistryRecord | undefined;
+    };
+    "workshop.events.list": {
+      input: Parameters<typeof listStoredSkillProposalEventsInDatabase>[1];
+      output: ReturnType<typeof listStoredSkillProposalEventsInDatabase>;
     };
     "doctor.workshopMigrationRecords.read": {
       input: { includeEvents: boolean };

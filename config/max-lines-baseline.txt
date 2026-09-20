@@ -507,7 +507,6 @@ src/commands/onboarding-plugin-install.ts
 src/commands/status.test.ts
 src/config/config-misc.test.ts
 src/config/config.plugin-validation.test.ts
-src/config/env-preserve.ts
 src/config/io.observe-recovery.test.ts
 src/config/io.write-config.test.ts
 src/config/io.write-prepare.test.ts
