@@ -232,12 +232,15 @@ These are intentionally guarded by `test/scripts/ci-workflow-guards.test.ts`:
   backend, after runtime preparation completes. Native allocation can be smaller
   than the runner label. Native proof must cover available CPUs/RAM, fixture
   memory and cleanup. This adds no runner registrations.
-- macOS Swift regular PR/main and PR `release_gate` CI retains the complete
-  shared/app test workload plus lint/schema guards in one `tests` phase.
+- macOS Swift regular PR/main and PR `release_gate` CI runs complete app tests
+  plus lint/schema guards in `tests`, alongside independent OpenClawKit trait,
+  OpenClawKit test, and Swabble test graphs in `packages`.
   Ordinary full-scope manual validation adds independent release compilation,
   moves the guards to `release`, and retains health renders in `tests`.
-  Both phases use GitHub-hosted `macos-26`, `max-parallel: 2`, and the existing
-  30-minute budget. Build caches stay phase-owned; the sole eligible shared
+  All phases use GitHub-hosted `macos-26`, `max-parallel: 2`, and the existing
+  30-minute budget. This adds one hosted job and no Blacksmith registrations;
+  measure complete hosted timing including duplicated setup. Packages do not
+  restore or save app build products. Build caches stay phase-owned; the sole eligible shared
   SwiftPM cache writer is regular `tests` or full-validation `release`.
 - Android regular CI uses four test/lint rows, including benchmark compilation
   in the Kotlin-lint row when benchmark/build/dependency inputs change or the
@@ -251,8 +254,8 @@ These are intentionally guarded by `test/scripts/ci-workflow-guards.test.ts`:
   npm qualification still defers native jobs. All iOS build phases and screenshot
   shards use `macos-26` from the first attempt.
   The conservative full-tier non-Node inventory, including Control UI performance, is
-  86 rows, or 87 for historical UI targets. Excluding those four hosted rows
-  plus both macOS Swift phases and the always-hosted aggregate gate leaves at
+  87 rows, or 88 for historical UI targets. Excluding those four hosted rows
+  plus all three macOS Swift phases and the always-hosted aggregate gate leaves at
   most 80 potentially eligible jobs. The enforced Node caps therefore give
   150 registrations per main run and 210 per PR:
   `4 × 150 + 21 × 210 = 5,010` in the retained peak arrival envelope.
@@ -333,6 +336,15 @@ These are intentionally guarded by `test/scripts/ci-workflow-guards.test.ts`:
   execution and two-worker pins. This adds no jobs and does not promote hosted
   or hybrid tooling. The native two-CPU/8-GB tails require a larger-host timing
   comparison; capacity alone is not a measured speedup.
+- Numbered tooling measurements are collected in `toolingFileSeconds` ahead of
+  planner activation, which remains blocked on hosted/hybrid row capacity. The daily refit samples the
+  newest five successful PR CI runs because main-push plans omit this family.
+  Those measurements describe the PR merge-ref and update only tooling files;
+  main compact and release sampling retain their existing provenance. Preserve
+  independent-run medians, runner profiles and partial-plan history. An explicit
+  `--tooling-run <id>` seed records its source and may use one successful run.
+  Verbose-only case sums are conservative packing costs when cases overlap,
+  not measured file walls. Do not discount them to make row caps pass.
 - The Docker seed job requests `blacksmith-16vcpu-ubuntu-2404`; its weighted
   scheduler and serial declaration compiler policy stay unchanged.
   Canonical PRs and `main` share `resolveChangedDockerSeedLanes` owner-path
