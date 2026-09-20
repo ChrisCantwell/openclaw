@@ -32,6 +32,7 @@ export function normalizeAssignment(value: unknown): AgentAssignment {
   if (!value || typeof value !== "object") {
     return EMPTY_ASSIGNMENT;
   }
+  // SAFETY: the trust boundary for persisted values; the assertion only enables reading unknown properties, and every field is re-validated below.
   const record = value as { mode?: unknown; names?: unknown };
   const mode: AgentAssignmentMode =
     record.mode === "all" || record.mode === "selected" ? record.mode : "none";

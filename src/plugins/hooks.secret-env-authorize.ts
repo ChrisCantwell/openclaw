@@ -60,6 +60,7 @@ export function createSecretEnvAuthorizeRunner(deps: {
     for (const hook of hooks) {
       let handlerResult: PluginHookSecretEnvAuthorizeResult | void;
       try {
+        // SAFETY: the registry only admits function handlers; the assertion only narrows the erased callback signature for the fail-closed call below.
         const handler = hook.handler as (
           event: PluginHookSecretEnvAuthorizeEvent,
           ctx: PluginHookSecretEnvAuthorizeContext,

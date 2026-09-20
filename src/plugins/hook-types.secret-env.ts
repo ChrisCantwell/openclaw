@@ -1,4 +1,4 @@
-import type { PluginHookAgentContext } from "./hook-types.js";
+import type { PluginHookAgentContext } from "./hook-types.agent-context.js";
 
 /** One resolved store entry in the projection, identified by name and kind only. */
 type PluginHookSecretEnvCandidate = { name: string; kind: "secret" | "env" };

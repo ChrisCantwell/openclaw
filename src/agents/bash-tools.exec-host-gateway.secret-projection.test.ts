@@ -9,7 +9,6 @@ import {
   resetDiagnosticEventsForTest,
 } from "../infra/diagnostic-events.js";
 import type { DiagnosticSecurityEvent } from "../infra/diagnostic-events.js";
-import type { ExecSecurity } from "../infra/exec-approvals.js";
 import {
   initializeGlobalHookRunner,
   resetGlobalHookRunner,
@@ -20,7 +19,6 @@ import {
   resetGatewayWorkAdmission,
 } from "../process/gateway-work-admission.js";
 import { createProcessSupervisor } from "../process/supervisor/supervisor.js";
-import type { ProcessSupervisor } from "../process/supervisor/types.js";
 import { authorizeSecretEnvForExec } from "./bash-tools.exec-secret-authorize.js";
 import type { ExecApprovalFollowupOutcome } from "./bash-tools.exec-types.js";
 
@@ -108,7 +106,6 @@ const evaluateShellAllowlistWithAuthorizationMock = vi.hoisted(() =>
 const hasDurableExecApprovalMock = vi.hoisted(() => vi.fn(() => false));
 const requiresExecApprovalMock = vi.hoisted(() => vi.fn(() => true));
 const commitExecAuthorizationMock = vi.hoisted(() => vi.fn(async () => () => {}));
-const resolveApprovalDecisionOrUndefinedMock = vi.hoisted(() => vi.fn(async () => "allow-once"));
 const defaultExecAutoReviewerMock = vi.hoisted(() =>
   vi.fn(async () => ({ decision: "allow-once", risk: "low", rationale: "allowed" })),
 );
@@ -171,7 +168,9 @@ function runGatewayAllowlist(
 }
 function requireSentFollowupText(index: number): string {
   const call = sendExecApprovalFollowupResultMock.mock.calls[index];
-  if (!call) throw new Error("missing followup");
+  if (!call) {
+    throw new Error("missing followup");
+  }
   return call[1] ?? "";
 }
 function mockApprovedDetachedExec(params: {
@@ -197,7 +196,9 @@ function mockApprovedDetachedExec(params: {
 function captureSecurityEvents(): { events: DiagnosticSecurityEvent[]; stop: () => void } {
   const events: DiagnosticSecurityEvent[] = [];
   const stop = onInternalDiagnosticEvent((event, metadata) => {
-    if (metadata.trusted && event.type === "security.event") events.push(event);
+    if (metadata.trusted && event.type === "security.event") {
+      events.push(event);
+    }
   });
   return { events, stop };
 }
@@ -218,7 +219,9 @@ function installSyntheticAssignmentPolicy(): SyntheticAssignmentPolicy {
           const event = args[0] as { candidates: Array<{ name: string }> };
           const ctx = args[1] as { agentId?: string };
           const selected = assignments.get(ctx.agentId ?? "");
-          if (!selected) return { allowedNames: [] };
+          if (!selected) {
+            return { allowedNames: [] };
+          }
           const allowed = new Set(selected);
           return {
             allowedNames: event.candidates
