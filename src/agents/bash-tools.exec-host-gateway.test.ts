@@ -52,6 +52,11 @@ import * as commandResolution from "../infra/exec-command-resolution.js";
 import { executeSqliteQuerySync, getNodeSqliteKysely } from "../infra/kysely-sync.js";
 import * as mutableFilePolicy from "../infra/system-run-mutable-file-policy.js";
 import {
+  initializeGlobalHookRunner,
+  resetGlobalHookRunner,
+} from "../plugins/hook-runner-global.js";
+import { createMockPluginRegistry } from "../plugins/hooks.test-helpers.js";
+import {
   getActiveGatewayRootWorkCount,
   markGatewayRestartDraining,
   resetGatewayWorkAdmission,
@@ -66,6 +71,7 @@ import {
   openOpenClawStateDatabase,
 } from "../state/openclaw-state-db.js";
 import { resetProcessRegistryForTests } from "./bash-process-registry.test-support.js";
+import { authorizeSecretEnvForExec } from "./bash-tools.exec-secret-authorize.js";
 import type {
   ExecApprovalFollowupFactory,
   ExecApprovalFollowupOutcome,
@@ -525,6 +531,61 @@ function captureSecurityEvents(): {
     }
   });
   return { events, stop };
+}
+
+type SyntheticAssignmentPolicy = {
+  assign: (agentId: string, names: readonly string[]) => void;
+  authorize: (agentId: string) => ReturnType<typeof authorizeSecretEnvForExec>;
+  revoke: (agentId: string) => void;
+  reset: () => void;
+};
+
+/**
+ * Installs a mutable synthetic assignment policy as the real
+ * `secret_env_authorize` handler, through the real global hook runner. This
+ * exercises the real authorization seam (`authorizeSecretEnvForExec`), the real
+ * deferred Gateway launch owner, the real `runExecProcess`, and the real
+ * process supervisor. The policy body stands in for the broker's persisted
+ * store (whose RPC/persistence semantics are proven separately in the
+ * gateway-methods lane); the subject under test here is that an assignment
+ * change after snapshot capture propagates to the final process effect.
+ */
+function installSyntheticAssignmentPolicy(): SyntheticAssignmentPolicy {
+  const assignments = new Map<string, readonly string[]>();
+  const registry = createMockPluginRegistry([
+    {
+      pluginId: "synthetic-assignment-policy",
+      hookName: "secret_env_authorize",
+      handler: (event: { candidates: Array<{ name: string }> }, ctx: { agentId?: string }) => {
+        const selected = assignments.get(ctx.agentId ?? "");
+        if (!selected) {
+          return { allowedNames: [] };
+        }
+        const allowed = new Set(selected);
+        return { allowedNames: event.candidates.map((c) => c.name).filter((n) => allowed.has(n)) };
+      },
+    },
+  ]);
+  initializeGlobalHookRunner(registry);
+
+  return {
+    assign: (agentId, names) => {
+      assignments.set(agentId, [...names]);
+    },
+    authorize: (agentId) =>
+      authorizeSecretEnvForExec({
+        storeEnv: { env: { DEPLOY_ENV_A: "synthetic-a", DEPLOY_ENV_B: "synthetic-b" } },
+        host: "gateway",
+        agentId,
+      }),
+    revoke: (agentId) => {
+      assignments.set(agentId, []);
+    },
+    reset: () => {
+      resetGlobalHookRunner();
+      assignments.clear();
+    },
+  };
 }
 
 describe("processGatewayAllowlist", () => {
@@ -3069,6 +3130,154 @@ EOF`,
     });
     expect(recheck).toHaveBeenCalledOnce();
     expect(requireSentFollowupText(0)).not.toContain("secret-projection-denied");
+  });
+
+  // Discriminating real-owner proof. Unlike the callback-level test above, this
+  // does NOT rely on a mock re-invoking the recheck: the deferred owner calls the
+  // real `runExecProcess`, which drives the real process supervisor and a real
+  // child. A revocation that lands during the approval wait must therefore
+  // propagate through the real launch owner to the final process effect.
+  //
+  // Baseline behavior (the deferred owner's pre-spawn recheck removed): the
+  // captured `DEPLOY_ENV_A` would be delivered to a launched process and the
+  // marker would exist. Under this fix the child never launches.
+  it("withholds a revoked assignment at the real deferred launch owner and spawns no process", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+    buildExecApprovalFollowupTargetMock.mockImplementation((value) => value);
+
+    const policy = installSyntheticAssignmentPolicy();
+    let supervisor: ProcessSupervisor | undefined;
+    const markerPath = path.join(fs.realpathSync(os.tmpdir()), `revoked-${crypto.randomUUID()}`);
+    try {
+      policy.assign("agent-revoked", ["DEPLOY_ENV_A"]);
+      const authorization = await policy.authorize("agent-revoked");
+      expect(authorization.denied).toBeUndefined();
+      expect(authorization.storeEnv.env).toEqual({ DEPLOY_ENV_A: "synthetic-a" });
+      expect(authorization.beforeSpawn).toBeTypeOf("function");
+      const env: Record<string, string> = { PATH: "/usr/bin:/bin", ...authorization.storeEnv.env };
+
+      const runtime = await vi.importActual<typeof import("./bash-tools.exec-runtime.js")>(
+        "./bash-tools.exec-runtime.js",
+      );
+      runExecProcessMock.mockImplementation(runtime.runExecProcess);
+      supervisor = createProcessSupervisor();
+      startupCancellationMocks.spawn.mockImplementation(supervisor.spawn.bind(supervisor));
+
+      // Revoke during the approval wait, then let the approval resolve anyway.
+      resolveExecApprovalWaitOutcomeMock.mockImplementationOnce(async () => {
+        policy.revoke("agent-revoked");
+        return {
+          kind: "resolved" as const,
+          decision: "allow-once",
+          state: {
+            baseDecision: { timedOut: false },
+            approvedByAsk: true,
+            deniedReason: null,
+            timeoutContext: undefined,
+          },
+        };
+      });
+
+      const captured = captureSecurityEvents();
+      try {
+        const result = await runGatewayAllowlist({
+          command: `printf '%s' "$DEPLOY_ENV_A" > ${quoteCliArg(markerPath)}`,
+          approvalFollowupMode: "agent",
+          env,
+          requestedEnv: env,
+          workdir: os.tmpdir(),
+          sessionId: "approval-session",
+          secretEnvBeforeSpawn: authorization.beforeSpawn,
+        });
+
+        expect(result.pendingResult?.details.status).toBe("approval-pending");
+        await vi.waitFor(() => expect(sendExecApprovalFollowupResultMock).toHaveBeenCalledTimes(1));
+        await vi.waitFor(() => expect(getActiveGatewayRootWorkCount()).toBe(0));
+
+        // Final process effect: the revoked entry never reached a launched process.
+        await expect(fs.promises.stat(markerPath)).rejects.toMatchObject({ code: "ENOENT" });
+        expect(requireSentFollowupText(0)).toContain("secret-projection-denied");
+        expect(captured.events.at(-1)).toMatchObject({
+          action: "exec.approval.denied",
+          outcome: "denied",
+          policy: { reason: "secret-projection-denied" },
+        });
+      } finally {
+        captured.stop();
+      }
+    } finally {
+      fs.rmSync(markerPath, { force: true });
+      await supervisor?.shutdown();
+      policy.reset();
+    }
+  });
+
+  // Positive control: with the same real owner and real process path, an
+  // assignment still authorized at the launch boundary runs the real child and
+  // delivers the assigned entry. Without this, "nothing launched" could be a
+  // harness artifact rather than enforcement.
+  it("launches the real child through the real deferred owner when the assignment stays authorized", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "allowlist",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+    buildExecApprovalFollowupTargetMock.mockImplementation((value) => value);
+
+    const policy = installSyntheticAssignmentPolicy();
+    let supervisor: ProcessSupervisor | undefined;
+    const markerPath = path.join(fs.realpathSync(os.tmpdir()), `assigned-${crypto.randomUUID()}`);
+    try {
+      policy.assign("agent-assigned", ["DEPLOY_ENV_A"]);
+      const authorization = await policy.authorize("agent-assigned");
+      expect(authorization.denied).toBeUndefined();
+      const env: Record<string, string> = { PATH: "/usr/bin:/bin", ...authorization.storeEnv.env };
+
+      const runtime = await vi.importActual<typeof import("./bash-tools.exec-runtime.js")>(
+        "./bash-tools.exec-runtime.js",
+      );
+      runExecProcessMock.mockImplementation(runtime.runExecProcess);
+      supervisor = createProcessSupervisor();
+      startupCancellationMocks.spawn.mockImplementation(supervisor.spawn.bind(supervisor));
+
+      resolveExecApprovalWaitOutcomeMock.mockResolvedValueOnce({
+        kind: "resolved",
+        decision: "allow-once",
+        state: {
+          baseDecision: { timedOut: false },
+          approvedByAsk: true,
+          deniedReason: null,
+          timeoutContext: undefined,
+        },
+      });
+
+      const result = await runGatewayAllowlist({
+        command: `printf '%s' "$DEPLOY_ENV_A" > ${quoteCliArg(markerPath)}`,
+        approvalFollowupMode: "agent",
+        env,
+        requestedEnv: env,
+        workdir: os.tmpdir(),
+        sessionId: "approval-session",
+        secretEnvBeforeSpawn: authorization.beforeSpawn,
+      });
+
+      expect(result.pendingResult?.details.status).toBe("approval-pending");
+      await vi.waitFor(() => expect(sendExecApprovalFollowupResultMock).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(getActiveGatewayRootWorkCount()).toBe(0));
+
+      expect(fs.readFileSync(markerPath, "utf8")).toBe("synthetic-a");
+      expect(requireSentFollowupText(0)).not.toContain("secret-projection-denied");
+    } finally {
+      fs.rmSync(markerPath, { force: true });
+      await supervisor?.shutdown();
+      policy.reset();
+    }
   });
 
   it("keeps multiline gateway approval follow-up output intact", async () => {
