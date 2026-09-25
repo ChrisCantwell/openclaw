@@ -2330,6 +2330,25 @@ class TalkModeManager internal constructor(
     finalizeTranscript(transcript)
   }
 
+  /**
+   * Runs one wake-word turn as a voice exchange: submit the dictated command, wait for the agent's
+   * reply, and speak it. A wake satellite has no visible Activity to read, so the answer must come
+   * back as audio; this reuses the Talk mode chat + speak path without entering continuous Talk.
+   */
+  suspend fun speakWakeTurn(command: String): Boolean {
+    val transcript = command.trim()
+    if (transcript.isEmpty()) return false
+    if (!isConnected()) return false
+    return try {
+      finalizeTranscript(transcript)
+      true
+    } catch (err: Throwable) {
+      if (err is CancellationException) throw err
+      Log.w(tag, "wake turn failed: ${err.message ?: err::class.simpleName}")
+      false
+    }
+  }
+
   private suspend fun finalizeTranscript(transcript: String) {
     listeningMode = false
     _isListening.value = false

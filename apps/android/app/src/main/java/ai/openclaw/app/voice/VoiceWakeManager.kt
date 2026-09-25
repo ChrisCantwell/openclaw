@@ -275,7 +275,6 @@ internal class VoiceWakeManager(
 
   private val lock = Any()
   private var enabled = false
-  private var foreground = false
   private var sessionGeneration = 0L
   private var sessionActive = false
   private var commandInFlight = false
@@ -307,12 +306,14 @@ internal class VoiceWakeManager(
     performRecognizerAction(action)
   }
 
+  /**
+   * Activity visibility no longer gates wake listening; always-on listening is governed by
+   * [setEnabled] plus the capture-suppression reasons. Retained so runtime lifecycle callers stay
+   * valid, and it still reconciles in case availability changed while the Activity was away.
+   */
+  @Suppress("UNUSED_PARAMETER")
   fun setForeground(value: Boolean) {
-    val action =
-      synchronized(lock) {
-        foreground = value
-        reconcileLocked()
-      }
+    val action = synchronized(lock) { reconcileLocked() }
     performRecognizerAction(action)
   }
 
@@ -349,7 +350,6 @@ internal class VoiceWakeManager(
     val action =
       synchronized(lock) {
         enabled = false
-        foreground = false
         val pendingAction = stopSessionLocked(destroy = true)
         _statusText.value = nativeText("Off")
         pendingAction
@@ -360,7 +360,7 @@ internal class VoiceWakeManager(
   private fun reconcileLocked(): RecognizerAction? {
     val blockedStatus = blockedStatusLocked()
     if (blockedStatus != null) {
-      val action = stopSessionLocked(destroy = !enabled || !foreground)
+      val action = stopSessionLocked(destroy = !enabled)
       _statusText.value = blockedStatus
       return action
     }
@@ -375,7 +375,7 @@ internal class VoiceWakeManager(
       !enabled -> nativeText("Off")
       !recognizer.isAvailable -> nativeText("On-device speech recognition unavailable")
       !hasRecordAudioPermission() -> nativeText("Microphone permission required")
-      !foreground || suppressionReasons.isNotEmpty() -> nativeText("Paused")
+      suppressionReasons.isNotEmpty() -> nativeText("Paused")
       else -> null
     }
 

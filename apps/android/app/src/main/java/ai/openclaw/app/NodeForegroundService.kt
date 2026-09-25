@@ -32,10 +32,19 @@ class NodeForegroundService : Service() {
   private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private var notificationJob: Job? = null
   private var voiceCaptureMode = VoiceCaptureMode.Off
+  // Always-on wake listening keeps the microphone foreground-service type even when no Activity
+  // is visible; the persistent notification is the OS-required disclosure for that capture.
+  private var voiceWakeListening = false
+
+  // Derived from the wake toggle plus the mic grant, never from transient recognizer state. The
+  // recognizer cannot reach "listening" until it has microphone access, so keying the service type
+  // off listening alone deadlocks: no mic type -> no capture -> never listening -> no mic type.
+  private var voiceWakeMicHold = false
 
   override fun onCreate() {
     super.onCreate()
     ensureChannel()
+    voiceWakeMicHold = computeWakeMicHold()
     val initial =
       buildNotification(
         title = nativeString("OpenClaw Node"),
@@ -90,15 +99,32 @@ class NodeForegroundService : Service() {
           runtime.talkModeListening,
           runtime.talkModeSpeaking,
         ) { micEnabled, micListening, talkListening, talkSpeaking ->
-          VoiceNotificationCapture(
+          MicCaptureState(
             micEnabled = micEnabled,
             micListening = micListening,
             talkListening = talkListening,
             talkSpeaking = talkSpeaking,
           )
         },
-      ) { base, capture ->
-        VoiceNotificationState(base = base, capture = capture)
+        combine(
+          runtime.voiceWakeIsListening,
+          runtime.voiceWakeEnabled,
+        ) { wakeListening, wakeEnabled ->
+          WakeCaptureState(listening = wakeListening, enabled = wakeEnabled)
+        },
+      ) { base, mic, wake ->
+        VoiceNotificationState(
+          base = base,
+          capture =
+            VoiceNotificationCapture(
+              micEnabled = mic.micEnabled,
+              micListening = mic.micListening,
+              talkListening = mic.talkListening,
+              talkSpeaking = mic.talkSpeaking,
+              voiceWakeListening = wake.listening,
+              voiceWakeEnabled = wake.enabled,
+            ),
+        )
       }
     refreshNotificationOnLocaleChanges(
       states = notificationStates,
@@ -107,6 +133,12 @@ class NodeForegroundService : Service() {
       ensureChannelForLocaleRevision(update.localeRevision)
       val state = update.state
       voiceCaptureMode = state.mode
+      voiceWakeListening = state.capture.voiceWakeListening
+      voiceWakeMicHold =
+        wakeMicHoldEnabled(
+          voiceWakeEnabled = state.capture.voiceWakeEnabled,
+          recordAudioGranted = hasRecordAudioPermission(),
+        )
       val title =
         when {
           state.connected && state.mode == VoiceCaptureMode.TalkMode -> {
@@ -130,6 +162,7 @@ class NodeForegroundService : Service() {
             manualMicListening = state.capture.micListening,
             talkListening = state.capture.talkListening,
             talkSpeaking = state.capture.talkSpeaking,
+            voiceWakeListening = state.capture.voiceWakeListening,
           )
 
       startForegroundWithTypes(
@@ -242,9 +275,24 @@ class NodeForegroundService : Service() {
       foregroundServiceTypes(
         voiceMode = voiceCaptureMode,
         backgroundLocationActive = isBackgroundLocationActive(),
+        // Hold the microphone type while wake is armed, not merely while a session happens to be
+        // live, so recognizer restarts keep microphone access instead of losing it between turns.
+        voiceWakeActive = voiceWakeListening || voiceWakeMicHold,
       )
     ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, serviceTypes)
   }
+
+  private fun computeWakeMicHold(): Boolean {
+    val prefs = (application as? NodeApp)?.prefs ?: return false
+    return wakeMicHoldEnabled(
+      voiceWakeEnabled = prefs.voiceWakeEnabled.value,
+      recordAudioGranted = hasRecordAudioPermission(),
+    )
+  }
+
+  private fun hasRecordAudioPermission(): Boolean =
+    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+      PackageManager.PERMISSION_GRANTED
 
   private fun isBackgroundLocationActive(): Boolean {
     if (!SensitiveFeatureConfig.backgroundLocationEnabled) return false
@@ -312,9 +360,22 @@ class NodeForegroundService : Service() {
   }
 }
 
+/**
+ * Whether the microphone foreground-service type must be held for always-on wake listening.
+ *
+ * Android grants microphone as "while in use" only; a foreground service holding the microphone
+ * type is what extends that capture past Activity visibility. Gating the type on the wake toggle
+ * rather than on a live recognition session avoids the restart deadlock described in the service.
+ */
+internal fun wakeMicHoldEnabled(
+  voiceWakeEnabled: Boolean,
+  recordAudioGranted: Boolean,
+): Boolean = voiceWakeEnabled && recordAudioGranted
+
 internal fun foregroundServiceTypes(
   voiceMode: VoiceCaptureMode,
   backgroundLocationActive: Boolean,
+  voiceWakeActive: Boolean = false,
 ): Int {
   val base = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
   val voiceTypes =
@@ -325,10 +386,13 @@ internal fun foregroundServiceTypes(
       VoiceCaptureMode.TalkMode,
       -> base or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
     }
+  // Always-on wake capture outlives the Activity, so it needs the microphone type on its own.
+  val wakeTypes =
+    if (voiceWakeActive) voiceTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else voiceTypes
   return if (backgroundLocationActive) {
-    voiceTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+    wakeTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
   } else {
-    voiceTypes
+    wakeTypes
   }
 }
 
@@ -345,6 +409,7 @@ internal fun voiceNotificationSuffix(
   manualMicListening: Boolean,
   talkListening: Boolean,
   talkSpeaking: Boolean,
+  voiceWakeListening: Boolean = false,
 ): String =
   when (mode) {
     VoiceCaptureMode.TalkMode -> {
@@ -368,7 +433,7 @@ internal fun voiceNotificationSuffix(
     }
 
     VoiceCaptureMode.Off -> {
-      ""
+      if (voiceWakeListening) nativeString(" · Wake: Listening") else ""
     }
   }
 
@@ -385,12 +450,28 @@ private data class VoiceNotificationBase(
   val mode: VoiceCaptureMode,
 )
 
+/** Manual mic and Talk capture fields. */
+private data class MicCaptureState(
+  val micEnabled: Boolean,
+  val micListening: Boolean,
+  val talkListening: Boolean,
+  val talkSpeaking: Boolean,
+)
+
+/** Wake-word fields: live listening drives copy, the toggle drives the held service type. */
+private data class WakeCaptureState(
+  val listening: Boolean,
+  val enabled: Boolean,
+)
+
 /** Voice capture fields that affect foreground-service type and suffix. */
 private data class VoiceNotificationCapture(
   val micEnabled: Boolean,
   val micListening: Boolean,
   val talkListening: Boolean,
   val talkSpeaking: Boolean,
+  val voiceWakeListening: Boolean,
+  val voiceWakeEnabled: Boolean = false,
 )
 
 /** Aggregated notification state from runtime flows. */

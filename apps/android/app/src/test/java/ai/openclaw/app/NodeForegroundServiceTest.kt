@@ -2424,6 +2424,33 @@ class NodeForegroundServiceTest {
       " · Talk: Speaking",
       voiceNotificationSuffix(VoiceCaptureMode.TalkMode, false, false, true, true),
     )
+    assertEquals(
+      " · Wake: Listening",
+      voiceNotificationSuffix(VoiceCaptureMode.Off, false, false, false, false, voiceWakeListening = true),
+    )
+  }
+
+  @Test
+  fun foregroundServiceTypes_keepsMicrophoneForAlwaysOnWakeListening() {
+    assertEquals(
+      ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+      foregroundServiceTypes(VoiceCaptureMode.Off, backgroundLocationActive = false, voiceWakeActive = true),
+    )
+    assertEquals(
+      ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+      foregroundServiceTypes(VoiceCaptureMode.Off, backgroundLocationActive = true, voiceWakeActive = true),
+    )
+  }
+
+  @Test
+  fun wakeMicHoldEnabled_requiresWakeToggleAndMicrophoneGrant() {
+    assertTrue(wakeMicHoldEnabled(voiceWakeEnabled = true, recordAudioGranted = true))
+    // Toggle off must release the microphone type.
+    assertFalse(wakeMicHoldEnabled(voiceWakeEnabled = false, recordAudioGranted = true))
+    // Microphone type without the runtime grant would fault the foreground start.
+    assertFalse(wakeMicHoldEnabled(voiceWakeEnabled = true, recordAudioGranted = false))
   }
 
   private fun buildNotification(service: NodeForegroundService): Notification {

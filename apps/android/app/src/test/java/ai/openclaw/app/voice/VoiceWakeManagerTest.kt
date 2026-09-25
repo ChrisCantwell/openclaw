@@ -223,6 +223,46 @@ class VoiceWakeManagerTest {
       assertEquals(2, recognizer.startCount)
     }
 
+  @Test
+  fun staysListeningWhileActivityIsNotVisible() =
+    runTest {
+      val recognizer = FakeVoiceWakeRecognizer()
+      val manager = manager(recognizer = recognizer)
+
+      manager.setEnabled(true)
+      recognizer.emit(VoiceWakeRecognitionEvent.Ready)
+
+      assertTrue(manager.isListening.value)
+      assertEquals("Listening", manager.statusText.value)
+
+      // Always-on listening is the point: backgrounding must not pause the recognizer.
+      manager.setForeground(false)
+      assertEquals("Listening", manager.statusText.value)
+      assertTrue(manager.isListening.value)
+      assertEquals(0, recognizer.stopCount)
+
+      // Returning to the foreground still reconciles without tearing the session down.
+      manager.setForeground(true)
+      assertEquals("Listening", manager.statusText.value)
+      assertTrue(manager.isListening.value)
+      assertEquals(0, recognizer.stopCount)
+    }
+
+  @Test
+  fun disabledWakeWordStillStopsRecognizer() =
+    runTest {
+      val recognizer = FakeVoiceWakeRecognizer()
+      val manager = manager(recognizer = recognizer)
+
+      manager.setEnabled(true)
+      recognizer.emit(VoiceWakeRecognitionEvent.Ready)
+      assertEquals("Listening", manager.statusText.value)
+
+      manager.setEnabled(false)
+      assertEquals("Off", manager.statusText.value)
+      assertFalse(manager.isListening.value)
+    }
+
   private fun kotlinx.coroutines.test.TestScope.manager(
     recognizer: FakeVoiceWakeRecognizer,
     hasPermission: () -> Boolean = { true },

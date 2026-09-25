@@ -550,6 +550,7 @@
     <string name="native_4ba5121d4d1be174" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"دستگاه‌ها"</string>
     <string name="native_4bc652d0bc018e69" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"OpenClaw برای Android."</string>
     <string name="native_4bcf240ace02f19c" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"در انتظار تأیید قابلیت"</string>
+    <string name="native_4c086c788ad0fdab" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Search snippet"</string>
     <string name="native_4c09c146861e92a9" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"پیش از اجرا، فعال‌سازی، غیرفعال‌سازی، حذف یا تازه‌سازی این خودکارسازی، ویرایش‌های خود را ذخیره کنید یا به حالت قبل برگردانید."</string>
     <string name="native_4c27eb153d751834" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هنوز هیچ خودکارسازی‌ای وجود ندارد."</string>
     <string name="native_4c2dd6654a535240" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"این مهارت به %1$s مورد برای راه‌اندازی نیاز دارد. Android موارد نصب‌شده را نمایش می‌دهد؛ تغییرات راه‌اندازی/پیکربندی فقط از طریق دسکتاپ یا CLI انجام می‌شود."</string>
@@ -738,12 +739,14 @@
     <string name="native_674b38cae72bb0c8" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"گروه‌بندی‌نشده"</string>
     <string name="native_674eb55d9c353900" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"جزئیات زمان‌بندی"</string>
     <string name="native_67528858c36397f7" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"قابلیت‌های گوشی"</string>
+    <string name="native_67a0d2e0dab41fca" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Open source"</string>
     <string name="native_67a926f7008e2b0e" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"در دسترس نیست"</string>
     <string name="native_67b696468610b879" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"داشبورد"</string>
     <string name="native_67fa416afa64d304" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"جای‌گذاری توکن"</string>
     <string name="native_6827238fea72c88b" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هیچ ارائه‌دهنده‌ای وجود ندارد"</string>
     <string name="native_684889f0079cc145" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"اثر انگشت SHA-256"</string>
     <string name="native_68944e10a8b4b9be" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هنوز هیچ رشته‌گفتگویی وجود ندارد"</string>
+    <string name="native_68a06924a525de95" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Runs on-device, including while OpenClaw is in the background."</string>
     <string name="native_68a0cdfcc76d6ebd" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"میکروفون Bluetooth"</string>
     <string name="native_68f4ab0a0213b287" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هیچ تغییری در این تصویر لحظه‌ای وجود ندارد."</string>
     <string name="native_690dbe9dc0993c42" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"اخیر"</string>
@@ -844,6 +847,7 @@
     <string name="native_75081b593d15cf6e" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"غیرفعال"</string>
     <string name="native_752ae6f8d8349c75" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هنوز در انتظار تأیید"</string>
     <string name="native_75419062daafab8a" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"بارگذاری کارهای پس‌زمینه ممکن نشد"</string>
+    <string name="native_75573d44b7620f81" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Page excerpt"</string>
     <string name="native_757bfc36ce2e0428" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"بررسی کنید که OpenClaw بتواند در این گوشی به‌وضوح صحبت کند."</string>
     <string name="native_75c4bbf668b72cbf" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"در حال کار · %1$s اجرای فعال"</string>
     <string name="native_75db671fb2e8cca9" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"پوشهٔ کاری فرمان"</string>
@@ -971,7 +975,6 @@
     <string name="native_88e0c9e9615456f9" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هیچ مورد برجسته‌ای وجود ندارد"</string>
     <string name="native_88e6e8384a7fc7ff" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"نشست هدف"</string>
     <string name="native_893a3e37d71c4563" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Gateway رد درخواست را ثبت کرد."</string>
-    <string name="native_89713b9c9c1b8f65" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"پذیرش"</string>
     <string name="native_8998824610d49175" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هر سؤالی دارید از OpenClaw بپرسید"</string>
     <string name="native_89bbfe23c3917a3f" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"برای ادامه دوباره متصل شوید"</string>
     <string name="native_8a20f46d5276b474" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"%1$s جفت‌شده"</string>
@@ -1298,6 +1301,7 @@
     <string name="native_b906e4f5d8dd6128" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هنوز هیچ عاملی بارگذاری نشده است."</string>
     <string name="native_b93a70717669740b" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"جستجو در ClawHub"</string>
     <string name="native_b96a4e034aae9cd8" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"جفت‌سازی لازم است"</string>
+    <string name="native_b99fa6c061504f00" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Preview unavailable"</string>
     <string name="native_b9cf97697898d132" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"اجراهای فعال"</string>
     <string name="native_b9d5d026db17b9e4" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"ناموفق — %1$s"</string>
     <string name="native_ba19e9c3d5f49882" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"قرمز"</string>
@@ -1417,6 +1421,7 @@
     <string name="native_ca7981b46ecf2c17" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"خاموش"</string>
     <string name="native_cae7d57bc067a514" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"توقف"</string>
     <string name="native_cae98462b30650eb" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"هنوز گفتگوی مطابقی وجود ندارد."</string>
+    <string name="native_caf85b0888d78f1f" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Sources"</string>
     <string name="native_cba62d81f910c7f0" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"جفت‌سازی Gateway موفق بود.\nقابلیت‌های گره این تلفن را از طریق رابط کاربری اپراتور تأیید کنید."</string>
     <string name="native_cc4b66e7e22230c3" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"این مهارت نصب شده است اما در حال حاضر شرایط اجرا را ندارد. برای تغییر پیکربندی از دسکتاپ یا CLI استفاده کنید."</string>
     <string name="native_cc5f45fb30a26e07" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"سامانهٔ تشخیص مشغول است"</string>
@@ -1661,6 +1666,7 @@
     <string name="native_ed7fcb6a70cb79c4" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"حذف پس از اجرا"</string>
     <string name="native_eddc4738cc953030" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"unpin"</string>
     <string name="native_edeead3f1961f9b8" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"Session History"</string>
+    <string name="native_ee2ee563817f4da9" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">" · Wake: Listening"</string>
     <string name="native_ee3c716130546a45" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"برداشتن سنجاق"</string>
     <string name="native_eed15187e1659f0f" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"استفاده از این گوشی"</string>
     <string name="native_ef33b48c555123fc" formatted="false" tools:ignore="Typos,TypographyDashes,TypographyEllipsis">"ورود به حساب تکمیل نشد. مرحلهٔ ورود را بررسی کنید و دوباره تلاش کنید."</string>

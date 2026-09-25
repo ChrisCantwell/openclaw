@@ -187,6 +187,7 @@ import kotlinx.serialization.json.contentOrNull
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -3380,8 +3381,11 @@ class NodeRuntime private constructor(
         refreshExecApprovalsFromGateway()
       }
     } else {
-      stopMessageSpeech()
-      stopActiveVoiceSession()
+      // Preserve an in-flight wake reply across the background transition; otherwise skip teardown.
+      if (!shouldPreserveVoiceSessionOnBackground()) {
+        stopMessageSpeech()
+        stopActiveVoiceSession()
+      }
       publishNodePresenceAliveBeacon(NodePresenceAliveBeacon.Trigger.Background, throttleRecentSuccess = true)
     }
   }
@@ -6090,10 +6094,28 @@ class NodeRuntime private constructor(
         ?.let(VoiceWakePreferences::sanitizeTriggerWords)
     }.getOrNull()
 
+  private val wakeTurnInFlight = AtomicBoolean(false)
+
+  /**
+   * Backgrounding must not kill a wake turn's reply: the command is dictated while the screen is off,
+   * so tearing down capture or playback here would silently drop the answer mid-flight.
+   */
+  private fun shouldPreserveVoiceSessionOnBackground(): Boolean = wakeTurnInFlight.get()
+
   private suspend fun sendVoiceWakeCommand(match: VoiceWakeMatch): Boolean {
     val gatewayId = connectedEndpoint?.stableId ?: return false
     if (!isVoiceWakeWordsReadyFor(gatewayId)) return false
     if (!_nodeConnected.value) return false
+    // A wake satellite is normally screen-off in another room, so a text reply is unreachable.
+    // Prefer a spoken voice exchange and keep the transcript path as the fallback when audio is off.
+    if (speakerEnabled.value) {
+      wakeTurnInFlight.set(true)
+      try {
+        if (talkMode.speakWakeTurn(match.command)) return true
+      } finally {
+        wakeTurnInFlight.set(false)
+      }
+    }
     val payload =
       buildJsonObject {
         put("eventId", JsonPrimitive(UUID.randomUUID().toString()))
